@@ -2,7 +2,7 @@
 
 #include "wfc.h"
 #include "bitfield.h"
-#include "utils.h"
+// #include "utils.h"
 #include "md5.h"
 
 #include <stdio.h>
@@ -76,7 +76,8 @@ blk_min_entropy(const wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
     vec2 the_location   = { 0 };
     uint8_t min_entropy = UINT8_MAX;
 
-    return 0;
+    // return 0;
+    return;
 }
 
 static inline uint64_t
@@ -114,6 +115,12 @@ blk_propagate(wfc_blocks_ptr blocks,
               uint32_t gx, uint32_t gy,
               uint64_t collapsed)
 {
+    /* phil: retirer l'état collapsed dans ce blk dans la grille */
+    for (uint32_t x = 0; x < blocks->block_side; x++){
+        for (uint32_t y = 0; y < blocks->block_side; y++){
+            *blk_at(blocks,gx,gy,x,y) != collapsed; // je ne vois pas comment faire ça 
+        }
+    }
     return 0;
 }
 
@@ -122,6 +129,12 @@ grd_propagate_row(wfc_blocks_ptr blocks,
                   uint32_t gx, uint32_t gy, uint32_t x, uint32_t y,
                   uint64_t collapsed)
 {
+    /* phil: retirer l'état collapsed dans la ligne de la grille */
+    for (uint32_t gx = 0; gx < blocks->grid_side; gx++){
+        for (uint32_t x = 0; x < blocks->block_side; x++){
+            *blk_at(blocks,gx,gy,x,y) != collapsed; // je ne vois pas comment faire ça 
+        }
+    }
     return 0;
 }
 
@@ -129,5 +142,11 @@ void
 grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy,
                      uint32_t x, uint32_t y, uint64_t collapsed)
 {
+    /* phil: retirer l'état collapsed dans la colonne de la grille */
+    for (uint32_t gy = 0; gy < blocks->grid_side; gy++){
+        for (uint32_t y = 0; y < blocks->block_side; y++){
+            *blk_at(blocks,gx,gy,x,y) != collapsed; // je ne vois pas comment faire ça 
+        }
+    }
     return 0;
 }

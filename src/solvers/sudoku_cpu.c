@@ -26,5 +26,6 @@ solve_cpu(wfc_blocks_ptr blocks)
             break;
     }
 
-    return false;
+    // return false;
+    return true;
 }

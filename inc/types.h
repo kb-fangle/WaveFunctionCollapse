@@ -33,6 +33,19 @@ typedef struct {
 
 typedef wfc_blocks *wfc_blocks_ptr;
 
+/* phil: pointeur vers un bloc. à un intégrer dans la struct blocks ? */
+typedef struct {
+    uint32_t gx;
+    uint32_t gy;
+    uint32_t x;
+    uint32_t y;
+
+    uint64_t state;
+    uint8_t entropy;
+} wfc_block;
+
+typedef wfc_block *wfc_block_ptr;
+
 typedef struct {
     const char *const data_file;
     const char *const output_folder;
