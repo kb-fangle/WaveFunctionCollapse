@@ -115,13 +115,11 @@ blk_propagate(wfc_blocks_ptr blocks,
               uint32_t gx, uint32_t gy,
               uint64_t collapsed)
 {
-    /* phil: retirer l'état collapsed dans ce blk dans la grille */
-    for (uint32_t x = 0; x < blocks->block_side; x++){
-        for (uint32_t y = 0; y < blocks->block_side; y++){
-            *blk_at(blocks,gx,gy,x,y) != collapsed; // je ne vois pas comment faire ça 
-        }
+    
+    uint32_t* block_loc = grd_at(blocks,gx,gy);
+    for (int i=0; i < blocks->block_side*blocks->block_side;i++){
+        block_loc[i] = bitfield_unset(block_loc[i],collapsed);
     }
-    return 0;
 }
 
 void
@@ -129,24 +127,28 @@ grd_propagate_row(wfc_blocks_ptr blocks,
                   uint32_t gx, uint32_t gy, uint32_t x, uint32_t y,
                   uint64_t collapsed)
 {
-    /* phil: retirer l'état collapsed dans la ligne de la grille */
-    for (uint32_t gx = 0; gx < blocks->grid_side; gx++){
-        for (uint32_t x = 0; x < blocks->block_side; x++){
-            *blk_at(blocks,gx,gy,x,y) != collapsed; // je ne vois pas comment faire ça 
+    uint32_t* row = 0;
+
+    
+    for (int i=0; i < blocks->grid_side;i++){
+        row = blk_at(blocks,i,gy,0,y);
+        for (int j=0; j < blocks->block_side;j++){
+            row[j] = bitfield_unset(row[j],collapsed);
         }
     }
-    return 0;
 }
 
 void
 grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy,
                      uint32_t x, uint32_t y, uint64_t collapsed)
 {
-    /* phil: retirer l'état collapsed dans la colonne de la grille */
-    for (uint32_t gy = 0; gy < blocks->grid_side; gy++){
-        for (uint32_t y = 0; y < blocks->block_side; y++){
-            *blk_at(blocks,gx,gy,x,y) != collapsed; // je ne vois pas comment faire ça 
+    uint32_t* col = 0;
+
+    
+    for (int i=0; i < blocks->grid_side;i++){
+        col = blk_at(blocks,gx,i,x,0);
+        for (int j=0; j < blocks->block_side;j++){
+            col[j*blocks->block_side] = bitfield_unset(col[j*blocks->block_side],collapsed);
         }
     }
-    return 0;
 }

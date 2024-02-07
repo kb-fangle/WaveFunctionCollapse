@@ -132,7 +132,7 @@ wfc_load(uint64_t seed, const char *path)
         uint64_t mask       = 0;
         const uint64_t base = wfc_control_states_count(ret->grid_side, ret->block_side);
         for (uint8_t i = 0; i < ret->block_side * ret->block_side; i += 1) {
-            mask = bitfield_set(mask, i);
+            mask = bitfield_set(mask, i);  // initilise le mask avec tous les états possible
             printf("nb bit=%d mask=%d puis %d\n",bitfield_count(mask),bitfield_get(mask,i));
         }
         ret->states[0] = seed;
@@ -161,14 +161,14 @@ wfc_load(uint64_t seed, const char *path)
         }
     
         const uint64_t collapsed   = to_u64(str_state);
-        // *blk_at(ret, gx, gy, x, y) = collapsed;
-        // blk_propagate(ret, gx, gy, collapsed);
-        // grd_propagate_column(ret, gx, gy, x, y, collapsed);
-        // grd_propagate_row(ret, gx, gy, x, y, collapsed);
-        // if (grd_check_error_in_column(ret, gx)) {
-        //     fprintf(stderr, "wrong propagation in block (%u, %u) from (%u, %u)\n", gx, gy, x, y);
-        //     exit(EXIT_FAILURE);
-        // }
+        *blk_at(ret, gx, gy, x, y) = bitfield_set(0,collapsed);
+        blk_propagate(ret, gx, gy, collapsed);
+        grd_propagate_column(ret, gx, gy, x, y, collapsed);
+        grd_propagate_row(ret, gx, gy, x, y, collapsed);
+        if (grd_check_error_in_column(ret, gx)) {
+            fprintf(stderr, "wrong propagation in block (%u, %u) from (%u, %u)\n", gx, gy, x, y);
+            exit(EXIT_FAILURE);
+        }
     }
 
     free(line);
