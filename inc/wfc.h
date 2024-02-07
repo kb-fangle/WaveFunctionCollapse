@@ -37,22 +37,14 @@ wfc_control_states_count(uint64_t grid_size, uint64_t block_size)
 static inline uint64_t *
 grd_at(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
 {
-    return 0;
+    return &blocks->states[gy*blocks->grid_side + gx];
 }
 
 static inline uint64_t *
 blk_at(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y)
 {
-    /*phil: pointeur vers le block qui a collapse */
-    wfc_block *bloc = NULL;
-    bloc->gx = gx;
-    bloc->gy = gy;
-    bloc->x = x;
-    bloc->y = y;
-    // bloc->entropy=0;
-    /* phil: rajouter cette structure dans la struct wfc_blocks ? */
     
-    return bloc->state;
+    return grd_at(blocks,gx,gy) + y * blocks->block_side + x;
 }
 
 // Printing functions
