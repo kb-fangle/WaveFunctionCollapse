@@ -18,6 +18,21 @@ solve_cpu(wfc_blocks_ptr blocks)
     forever {
         bool changed = false;
         // 1. Collapse
+
+        // Find minimum entropy
+        entropy_location min_entropy_loc;
+        min_entropy_loc.entropy = blocks->block_side * blocks->block_side;
+        entropy_location entropy_loc;
+
+        for (int gy=0; gy < blocks->grid_side; gy++){
+            for (int gx=0; gx < blocks->grid_side; gx++){
+                entropy_loc = blk_min_entropy(blocks,gx,gy);
+                if (entropy_loc.entropy < min_entropy_loc.entropy){
+                    min_entropy_loc = entropy_loc;
+                }
+            }
+        } 
+
         // 2. Propagate
         // 3. Check Error
 
