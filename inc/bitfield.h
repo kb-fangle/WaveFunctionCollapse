@@ -12,6 +12,13 @@ bitfield_set(uint64_t flag, uint8_t index)
     return flag | (1llu << index);
 }
 
+/// Unset the specific bit in an integer.
+static inline uint64_t
+bitfield_unset(uint64_t flag, uint8_t index)
+{
+    return flag & (0llu << index);
+}
+
 /// Get the specific bit in an integer. If the index doesn't exists returns 0.
 static inline uint64_t
 bitfield_get(uint64_t flag, uint8_t index)

@@ -17,12 +17,14 @@ main(int argc, char **argv)
     wfc_args args             = wfc_parse_args(argc, argv);
     const wfc_blocks_ptr init = wfc_load(0, args.data_file);
 
-    bool quit                = false;
+    // bool quit                = false;
+    _Atomic int quit         = 0;
     uint64_t iterations      = 0;
     wfc_blocks_ptr blocks    = NULL;
     pthread_mutex_t seed_mtx = PTHREAD_MUTEX_INITIALIZER;
 
-    bool *volatile const quit_ptr           = &quit;
+    // bool *volatile const quit_ptr           = &quit;
+    _Atomic *volatile quit_ptr           = &quit;
     uint64_t *volatile const iterations_ptr = &iterations;
 
     const uint64_t max_iterations = count_seeds(args.seeds);

@@ -37,13 +37,14 @@ wfc_control_states_count(uint64_t grid_size, uint64_t block_size)
 static inline uint64_t *
 grd_at(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
 {
-    return 0;
+    return &blocks->states[gy*blocks->grid_side + gx];
 }
 
 static inline uint64_t *
 blk_at(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y)
 {
-    return 0;
+    
+    return grd_at(blocks,gx,gy) + y * blocks->block_side + x;
 }
 
 // Printing functions

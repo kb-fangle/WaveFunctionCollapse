@@ -33,6 +33,7 @@ typedef struct {
 
 typedef wfc_blocks *wfc_blocks_ptr;
 
+
 typedef struct {
     const char *const data_file;
     const char *const output_folder;
