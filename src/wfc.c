@@ -41,7 +41,15 @@ entropy_collapse_state(uint64_t state,
 uint8_t
 entropy_compute(uint64_t state)
 {
-    return 0;
+    // int count = 0;
+    // // Compte le nombre de 1 dans le mask
+    // while(state){
+    //     count += state & 1;
+    //     state >>=1;
+    // }
+    
+    
+    return __buitlin_popcount(state);
 }
 
 void
@@ -73,11 +81,28 @@ wfc_clone_into(wfc_blocks_ptr *const restrict ret_ptr, uint64_t seed, const wfc_
 entropy_location
 blk_min_entropy(const wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
 {
+    // Initialisation entropy max
+    // entropy_location *blk_entropy = (entropy_location *)malloc(sizeof(entropy_location));
+    entropy_location blk_entropy;
+    uint8_t entropy = blocks->block_side * blocks->block_side;
     vec2 the_location   = { 0 };
-    uint8_t min_entropy = UINT8_MAX;
+    uint8_t min_entropy = entropy;
 
-    // return 0;
-    return;
+    // On parcours chaque case
+    uint32_t* block_loc = grd_at(blocks,gx,gy);
+    for (int i=0; i < blocks->block_side*blocks->block_side;i++){
+        entropy = entropy_compute(block_loc[i]);
+        if (entropy < min_entropy && entropy > 0){
+            min_entropy = entropy;
+            the_location.x = i % blocks->block_side;
+            the_location.y = i / blocks->block_side;
+            }
+    }
+
+    blk_entropy.location = the_location;
+    blk_entropy.entropy = min_entropy;
+    
+    return blk_entropy;
 }
 
 static inline uint64_t
