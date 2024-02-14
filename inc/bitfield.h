@@ -16,7 +16,7 @@ bitfield_set(uint64_t flag, uint8_t index)
 static inline uint64_t
 bitfield_unset(uint64_t flag, uint8_t index)
 {
-    return flag & (0llu << index);
+    return flag & ~(1llu << index);
 }
 
 /// Get the specific bit in an integer. If the index doesn't exists returns 0.
@@ -43,6 +43,9 @@ bitfield_count(uint64_t x)
 
 /// Get the integer with only the nth setted bit of the said integer.
 uint64_t bitfield_only_nth_set(uint64_t, uint8_t);
+
+/// Get the position of the nth set bit in a 64 bit number
+uint32_t bitfield_get_nth_set_bit(uint64_t v, uint32_t n);
 
 /// Prints the bitfield to the file descriptor.
 void bitfield_print(FILE *const, uint64_t);

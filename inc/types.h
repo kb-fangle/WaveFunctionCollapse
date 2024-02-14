@@ -13,6 +13,14 @@ typedef struct {
 } vec2;
 
 typedef struct {
+    uint32_t gx;
+    uint32_t gy;
+    uint32_t x;
+    uint32_t y;
+} position;
+
+
+typedef struct {
     vec2 location;
     uint8_t entropy;
 
@@ -27,6 +35,8 @@ typedef struct {
     uint8_t _1;
     uint8_t _2;
     uint32_t _3;
+
+    uint64_t seed;
 
     uint64_t states[];
 } wfc_blocks;
