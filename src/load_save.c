@@ -224,12 +224,13 @@ wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[
     const uint64_t starts = wfc_control_states_count(blocks->grid_side, blocks->block_side),
                    ends   = (uint64_t)blocks->grid_side * blocks->grid_side * (uint64_t)blocks->block_side *
                           blocks->block_side;
-    for (uint64_t i = 0; i < ends; i += 1) {
-        if (fprintf(f, "%lu\n", blocks->states[starts + i]) < 0) {
-            fprintf(stderr, "failed to write: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-    }
+    // for (uint64_t i = 0; i < ends; i += 1) {
+    //     if (fprintf(f, "%lu\n", blocks->states[starts + i]) < 0) {
+    //         fprintf(stderr, "failed to write: %s\n", strerror(errno));
+    //         exit(EXIT_FAILURE);
+    //     }
+    // }
+    grd_print(f,blocks);
 
     fprintf(stdout, "saved successfully %lu states\n", ends);
     fclose(f);
