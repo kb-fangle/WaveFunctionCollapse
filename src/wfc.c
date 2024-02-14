@@ -94,34 +94,55 @@ void blk_print(FILE *const file, const wfc_blocks_ptr block, uint32_t gx, uint32
     }
 }
 
-void grd_print(FILE *const file, const wfc_blocks_ptr block) {
-    // TODO
+void grd_print(FILE *const file, const wfc_blocks_ptr blocks) {
+    for (uint32_t gy = 0; gy < blocks->grid_side; gy++) {
+        for (uint32_t y = 0; y < blocks->block_side; y++) {
+            for (uint32_t gx = 0; gx < blocks->grid_side; gx++) {
+                uint64_t* row = blk_at(blocks, gx, gy, 0, y);
+                for (uint32_t x = 0; x < blocks->block_side; x++) {
+                    const uint64_t state = row[x];
+                    if (entropy_compute(state) == 1) {
+                        fprintf(file, "%2d ", bitfield_get_nth_set_bit(state, 1));
+                    } else {
+                        fprintf(file, " ? ");
+                    }
+                }
+                fprintf(file, gx < blocks->grid_side - 1 ? " | " : "\n");
+            }
+        }
+        if (gy < blocks->grid_side - 1) {
+            for (uint32_t gx = 0; gx < blocks->grid_side; gx++) {
+                for (uint32_t i = 0; i < 3 * blocks->block_side; i++) {
+                   putc('-', file);
+                }
+                fprintf(file, gx < blocks->grid_side - 1 ? " + " : "\n");
+            }
+        }
+    }
 }
 
 entropy_location
 blk_min_entropy(const wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
 {
-    entropy_location blk_entropy;
     // use a location at `UINT32_MAX` to indicate that there were no cell
     // with minimal entropy
-    vec2 the_location   = { UINT32_MAX, UINT32_MAX };
-    uint8_t min_entropy = UINT8_MAX;
+    entropy_location min_entropy_loc = {
+        .entropy = UINT8_MAX,
+        .location = { .x = UINT32_MAX, .y = UINT32_MAX, .gx = gx, .gy = gy }
+    };
 
     // On parcours chaque case
     uint64_t* block_loc = grd_at(blocks,gx,gy);
     for (uint32_t i=0; i < blocks->block_side*blocks->block_side;i++){
         const uint8_t entropy = entropy_compute(block_loc[i]);
-        if (entropy < min_entropy && entropy > 1){
-            min_entropy = entropy;
-            the_location.x = i % blocks->block_side;
-            the_location.y = i / blocks->block_side;
+        if (entropy < min_entropy_loc.entropy && entropy > 1){
+            min_entropy_loc.entropy = entropy;
+            min_entropy_loc.location.x = i % blocks->block_side;
+            min_entropy_loc.location.y = i / blocks->block_side;
         }
     }
-
-    blk_entropy.location = the_location;
-    blk_entropy.entropy = min_entropy;
     
-    return blk_entropy;
+    return min_entropy_loc;
 }
 
 entropy_location 
@@ -129,7 +150,7 @@ grd_min_entropy(const wfc_blocks_ptr blocks)
 {
     entropy_location min_entropy_loc = {
         .entropy = UINT8_MAX,
-        .location = { UINT32_MAX, UINT32_MAX }
+        .location = { .x = UINT32_MAX, .y = UINT32_MAX }
     };
 
     for (uint32_t gy=0; gy < blocks->grid_side; gy++){
@@ -259,15 +280,18 @@ check_grid(const wfc_blocks_ptr blocks)
     return grd_check_block_errors(blocks) && grd_check_row_errors(blocks) && grd_check_column_errors(blocks);
 }
 
-void
+bool
 blk_propagate(wfc_blocks_ptr blocks,
               uint32_t gx, uint32_t gy,
               uint64_t collapsed, position_list* collapsed_stack)
 {
     uint64_t* block_loc = grd_at(blocks,gx,gy);
+    bool changed = false;
 
     for (uint32_t i = 0; i < blocks->block_side * blocks->block_side; i++) {
         const uint64_t new_state = block_loc[i] & ~collapsed;
+
+        changed |= new_state != 0 && new_state != block_loc[i];
 
         if (new_state != block_loc[i] && bitfield_count(new_state) == 1) {
             position pos = { gx, gy, i % blocks->block_side, i / blocks->block_side };
@@ -275,18 +299,23 @@ blk_propagate(wfc_blocks_ptr blocks,
         }
         block_loc[i] = new_state;
     }
+
+    return changed;
 }
 
-void
+bool
 grd_propagate_row(wfc_blocks_ptr blocks, uint32_t gy, uint32_t y,
                   uint64_t collapsed, position_list* collapsed_stack)
 {
     uint64_t* row = 0;
+    bool changed = false;
 
     for (uint32_t gx=0; gx < blocks->grid_side;gx++){
         row = blk_at(blocks,gx,gy,0,y);
         for (uint32_t x=0; x < blocks->block_side;x++){
             const uint64_t new_state = row[x] & ~collapsed;
+            
+            changed |= new_state != 0 && new_state != row[x];
 
             if (new_state != row[x] && bitfield_count(new_state) == 1) {
                 position pos = { gx, gy, x, y };
@@ -296,19 +325,24 @@ grd_propagate_row(wfc_blocks_ptr blocks, uint32_t gy, uint32_t y,
             row[x] = new_state;
         }
     }
+
+    return changed;
 }
 
-void
+bool
 grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx,
                      uint32_t x, uint64_t collapsed, position_list* collapsed_stack)
 {
     uint64_t* col = 0;
+    bool changed = false;
 
     for (uint32_t gy=0; gy < blocks->grid_side;gy++){
         col = blk_at(blocks,gx,gy,x,0);
         for (uint32_t y=0; y < blocks->block_side;y++){
             const uint32_t index = y * blocks->block_side;
             const uint64_t new_state = col[index] & ~collapsed;
+
+            changed |= new_state != 0 && new_state != col[index];
 
             if (new_state != col[index] && bitfield_count(new_state) == 1) {
                 position pos = { gx, gy, x, y };
@@ -318,13 +352,18 @@ grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx,
             col[index] = new_state;
         }
     }
+
+    return changed;
 }
 
-void propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y) {
+bool
+propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y) {
     position_list collapsed_stack = position_list_init();
 
     position collapsed_pos = { gx, gy, x, y };
     position_list_push(&collapsed_stack, collapsed_pos);
+
+    bool changed = false;
 
     while (!position_list_is_empty(&collapsed_stack)) {
         const position pos = position_list_pop(&collapsed_stack);
@@ -332,12 +371,14 @@ void propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint
         uint64_t* collapsed_cell = blk_at(blocks, pos.gx, pos.gy, pos.x, pos.y);
         const uint64_t collapsed = *collapsed_cell;
 
-        blk_propagate(blocks, pos.gx, pos.gy, collapsed, &collapsed_stack);
-        grd_propagate_row(blocks, pos.gy, pos.y, collapsed, &collapsed_stack);
-        grd_propagate_column(blocks, pos.gx, pos.x, collapsed, &collapsed_stack);
+        changed |= blk_propagate(blocks, pos.gx, pos.gy, collapsed, &collapsed_stack);
+        changed |= grd_propagate_row(blocks, pos.gy, pos.y, collapsed, &collapsed_stack);
+        changed |= grd_propagate_column(blocks, pos.gx, pos.x, collapsed, &collapsed_stack);
 
         // The propagate functions will overwrite the collapsed state, so we
         // reset it to the right value
         *collapsed_cell = collapsed;
     }
+
+    return changed;
 }

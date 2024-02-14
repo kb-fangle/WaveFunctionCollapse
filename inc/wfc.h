@@ -84,16 +84,18 @@ uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t gy, uint32
 /// @param collapsed The state to collapse
 /// @param position_list A list containing the position of the states resolved after collapsing.
 ///
+/// @return true if at least one of the states changed, false otherwise.
+///
 /// @{
 
 /// Propagate a collapsed state in a block.
-void blk_propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint64_t collapsed, position_list* collapsed_stack);
+bool blk_propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint64_t collapsed, position_list* collapsed_stack);
 /// Propagate a collapsed state in a column.
-void grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx, uint32_t x, uint64_t collapsed, position_list* collapsed_stack);
+bool grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx, uint32_t x, uint64_t collapsed, position_list* collapsed_stack);
 /// Propagate a collapsed state in a row.
-void grd_propagate_row(wfc_blocks_ptr blocks, uint32_t gy, uint32_t y, uint64_t collapsed, position_list* collapsed_stack);
+bool grd_propagate_row(wfc_blocks_ptr blocks, uint32_t gy, uint32_t y, uint64_t collapsed, position_list* collapsed_stack);
 /// Propagate a collapsed state in the grid.
-void propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y);
+bool propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y);
 
 /// }@
 
