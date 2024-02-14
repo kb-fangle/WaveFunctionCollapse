@@ -57,3 +57,12 @@ bitfield_only_nth_set(uint64_t x, uint8_t n)
     return 1llu << find_nth_set_bit(x, n);
 }
 
+uint32_t bitfield_get_nth_set_bit(uint64_t v, uint32_t r) {
+  uint32_t i = 0;
+  while (r > 0) {
+    i++;
+    r -= v & 1;
+    v >>= 1;
+  }
+  return i;
+}

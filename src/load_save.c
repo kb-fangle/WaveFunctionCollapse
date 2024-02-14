@@ -72,7 +72,7 @@ to_u32(const char *string)
     return (uint32_t)integer;
 }
 
-static inline uint32_t
+static inline uint64_t
 to_u64(const char *string)
 {
     char *end               = NULL;
@@ -81,7 +81,7 @@ to_u64(const char *string)
         fprintf(stderr, "expected positive integer, got %lld\n", integer);
         exit(EXIT_FAILURE);
     }
-    return (uint32_t)integer;
+    return (uint64_t)integer;
 }
 
 wfc_blocks_ptr
@@ -133,9 +133,9 @@ wfc_load(uint64_t seed, const char *path)
         const uint64_t base = wfc_control_states_count(ret->grid_side, ret->block_side);
         for (uint8_t i = 0; i < ret->block_side * ret->block_side; i += 1) {
             mask = bitfield_set(mask, i);  // initilise le mask avec tous les états possible
-            printf("nb bit=%d mask=%d puis %d\n",bitfield_count(mask),bitfield_get(mask,i));
+            // printf("nb bit=%d mask=%d puis %d\n",bitfield_count(mask),bitfield_get(mask,i));
         }
-        ret->states[0] = seed;
+        ret->seed = seed;
         for (uint64_t i = 0; i < blkcnt + base; i += 1) {
             ret->states[i] = mask;
         }
@@ -161,12 +161,11 @@ wfc_load(uint64_t seed, const char *path)
         }
     
         const uint64_t collapsed   = to_u64(str_state);
-        *blk_at(ret, gx, gy, x, y) = bitfield_set(0,collapsed);
-        blk_propagate(ret, gx, gy, collapsed);
-        grd_propagate_column(ret, gx, gy, x, y, collapsed);
-        grd_propagate_row(ret, gx, gy, x, y, collapsed);
-        if (grd_check_error_in_column(ret, gx)) {
+        *blk_at(ret, gx, gy, x, y) = bitfield_set(0, (uint8_t)collapsed - 1);
+        propagate(ret, gx, gy, x, y);
+        if (!check_grid(ret)) {
             fprintf(stderr, "wrong propagation in block (%u, %u) from (%u, %u)\n", gx, gy, x, y);
+            blk_print(stderr, ret, gx, gy);
             exit(EXIT_FAILURE);
         }
     }
@@ -196,14 +195,14 @@ wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[
     const size_t folder_len = strlen(folder);
     if (folder[folder_len - 1] == '/' && file_name[0] == '/') {
         snprintf(destination, 1023, "%.*s%.*s.%lu.save", (int)(folder_len - 1), folder, (int)length,
-                 file_name, blocks->states[0]);
+                 file_name, blocks->seed);
     } else if ((folder[folder_len - 1] == '/' && file_name[0] != '/') ||
                (folder[folder_len - 1] != '/' && file_name[0] == '/')) {
         snprintf(destination, 1023, "%s%.*s.%lu.save", folder, (int)length, file_name,
-                 blocks->states[0]);
+                 blocks->seed);
     } else {
         snprintf(destination, 1023, "%s/%.*s.%lu.save", folder, (int)length, file_name,
-                 blocks->states[0]);
+                 blocks->seed);
     }
     fprintf(stdout, "save result to file: %s\n", destination);
 
@@ -223,7 +222,7 @@ wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[
     }
 
     const uint64_t starts = wfc_control_states_count(blocks->grid_side, blocks->block_side),
-                   ends   = blocks->grid_side * blocks->grid_side * blocks->block_side *
+                   ends   = (uint64_t)blocks->grid_side * blocks->grid_side * (uint64_t)blocks->block_side *
                           blocks->block_side;
     for (uint64_t i = 0; i < ends; i += 1) {
         if (fprintf(f, "%lu\n", blocks->states[starts + i]) < 0) {
