@@ -95,7 +95,12 @@ void blk_print(FILE *const file, const wfc_blocks_ptr block, uint32_t gx, uint32
 }
 
 void grd_print(FILE *const file, const wfc_blocks_ptr block) {
-    // TODO
+    for (int gy = 0; gy < block->grid_side; gy++){
+        for (int gx = 0; gx < block->grid_side; gx++){
+            blk_print(file,block,gx,gy);
+        }
+        fprintf(file, "\n");
+    }
 }
 
 entropy_location
