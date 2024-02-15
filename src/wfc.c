@@ -208,7 +208,7 @@ grd_check_block_errors(wfc_blocks_ptr blocks) {
             // mask composed of all collapsed states
             uint64_t collapsed_mask = 0;
             for (uint32_t i = 0; i < block_size; i++) {
-                if ((blk[i] & collapsed_mask) != 0) {
+                if (blk[i] == 0 || (blk[i] & collapsed_mask) != 0) {
                     return false; // TODO: Afficher un message d'erreur ?
                 }
 
@@ -233,7 +233,7 @@ grd_check_row_errors(wfc_blocks_ptr blocks) {
                 uint64_t* row = blk_at(blocks, gx, gy, 0, y);
 
                 for (uint32_t x = 0; x < blocks->block_side; x++) {
-                    if ((row[x] & collapsed_mask) != 0) {
+                    if (row[x] == 0 || (row[x] & collapsed_mask) != 0) {
                         return false;
                     }
 
@@ -259,12 +259,13 @@ grd_check_column_errors(wfc_blocks_ptr blocks) {
                 uint64_t* col = blk_at(blocks, gx, gy, x, 0);
 
                 for (uint32_t y = 0; y < blocks->block_side; y++) {
-                    if ((col[y * blocks->block_side] & collapsed_mask) != 0) {
+                    const uint64_t state = col[y * blocks->block_side];
+                    if (state == 0 || (state & collapsed_mask) != 0) {
                         return false;
                     }
 
-                    if (entropy_compute(col[y * blocks->block_side]) == 1) {
-                        collapsed_mask |= col[y * blocks->block_side];
+                    if (entropy_compute(state) == 1) {
+                        collapsed_mask |= state;
                     }
                 }
             }

@@ -9,11 +9,11 @@ if(insource OR insourcesubdir)
     MESSAGE(FATAL_ERROR "${CMAKE_PROJECT_NAME} requires an out of source build")
 endif()
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_BUILD_TYPE RelWithDebInfo)
-else()
-    set(CMAKE_BUILD_TYPE Debug)
-endif()
+# if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+#     set(CMAKE_BUILD_TYPE RelWithDebInfo)
+# else()
+#     set(CMAKE_BUILD_TYPE Debug)
+# endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON) # Pass -fPIC
 set(CMAKE_COLOR_MAKEFILE            ON)
@@ -27,7 +27,7 @@ file(GLOB_RECURSE WaveFunctionCollapse_INC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SO
 add_executable(wfc ${WaveFunctionCollapse_SRC} ${WaveFunctionCollapse_INC})
 target_include_directories(wfc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
 target_link_libraries(wfc  PRIVATE -pthread -fopenmp -lm)
-target_compile_options(wfc PRIVATE -g -O2 -pthread -fopenmp -std=c17)
+target_compile_options(wfc PRIVATE -pthread -fopenmp -std=c17)
 target_compile_options(wfc PRIVATE
     -Wall #-Wextra -pedantic -Werror
     -Wshadow

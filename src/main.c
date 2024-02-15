@@ -48,7 +48,8 @@ main(int argc, char **argv)
 
         if (solved && args.output_folder != NULL) {
             __atomic_fetch_or(quit_ptr, true, __ATOMIC_SEQ_CST);
-            fputc('\n', stdout);
+            fprintf(stdout, "\nsuccess with seed %lu\n", blocks->seed);
+            grd_print(stdout, blocks);
             wfc_save_into(blocks, args.data_file, args.output_folder);
         }
 
