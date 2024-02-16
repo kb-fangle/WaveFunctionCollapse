@@ -25,10 +25,10 @@ grd_min_entropy_omp(const wfc_blocks_ptr blocks)
         .location = { .x = UINT32_MAX, .y = UINT32_MAX }
     };
 
-    #pragma omp parallel for shared(min_entropy_loc)
+    #pragma omp parallel for shared(min_entropy_loc) schedule(static,blocks->grid_side)
     for (uint32_t gy=0; gy < blocks->grid_side; gy++){
 
-        #pragma omp parallel for shared(min_entropy_loc)
+        #pragma omp parallel for shared(min_entropy_loc) schedule(static,blocks->grid_side)
         for (uint32_t gx=0; gx < blocks->grid_side; gx++){
             entropy_location block_entropy = blk_min_entropy(blocks,gx,gy);
             if (compare_grd_entropy_locs(&min_entropy_loc, &block_entropy)){
