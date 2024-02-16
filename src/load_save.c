@@ -1,6 +1,8 @@
 #define _GNU_SOURCE
 
 #include "wfc.h"
+#include "wfc_omp.h"
+
 #include "bitfield.h"
 
 #include <ctype.h>

@@ -2,6 +2,7 @@
 
 #include "bitfield.h"
 #include "wfc.h"
+#include "wfc_omp.h"
 
 #include <float.h>
 #include <stdio.h>

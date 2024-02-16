@@ -76,8 +76,8 @@ entropy_location grd_min_entropy(const wfc_blocks_ptr blocks);
 entropy_location grd_min_entropy_omp(const wfc_blocks_ptr blocks);
 uint8_t entropy_compute(uint64_t);
 uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y, uint64_t seed, uint64_t iteration);
-
-
+bool compare_blk_entropy_locs(const entropy_location* current_min, const entropy_location* loc);
+bool compare_grd_entropy_locs(const entropy_location* current_min, const entropy_location* loc);
 ///
 /// @group Propagtion functions
 ///

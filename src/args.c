@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include "wfc.h"
+#include "wfc_omp.h"
 
 #include <string.h>
 #include <strings.h>
