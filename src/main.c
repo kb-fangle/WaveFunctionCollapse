@@ -51,6 +51,7 @@ main(int argc, char **argv)
             fprintf(stdout, "\nsuccess with seed %lu\n", blocks->seed);
             grd_print(stdout, blocks);
             wfc_save_into(blocks, args.data_file, args.output_folder);
+            
         }
 
         else if (solved) {

@@ -32,11 +32,12 @@ solve_cpu(wfc_blocks_ptr blocks)
         changed = propagate(blocks, gx, gy, x, y);
 
         if (!check_grid(blocks)) {
-            return false;
+            fprintf(stderr, "The grid is in an invalid state\n");
+            exit(EXIT_FAILURE);
         }
 
         iteration++;
     }
-
+    
     return changed;
 }
