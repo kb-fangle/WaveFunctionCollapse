@@ -1,14 +1,13 @@
 #pragma once
 
 #include <stdbool.h>
-#include <inttypes.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include "types.h"
 #include "position_list.h"
 
 // Entropy functions
 entropy_location grd_min_entropy_omp(const wfc_blocks_ptr blocks);
+
 ///
 /// @group Propagtion functions
 ///

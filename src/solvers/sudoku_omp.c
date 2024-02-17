@@ -2,6 +2,7 @@
 
 #include "bitfield.h"
 #include "wfc.h"
+#include "wfc_omp.h"
 
 #include <omp.h>
 
@@ -26,8 +27,7 @@ solve_openmp(wfc_blocks_ptr blocks)
         changed = propagate_omp(blocks, gx, gy, x, y);
 
         if (!check_grid_omp(blocks)) {
-            fprintf(stderr, "The grid is in an invalid state\n");
-            exit(EXIT_FAILURE);
+            return false;
         }
 
         iteration++;

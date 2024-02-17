@@ -102,10 +102,17 @@ void grd_print(FILE *const file, const wfc_blocks_ptr blocks) {
                 uint64_t* row = blk_at(blocks, gx, gy, 0, y);
                 for (uint32_t x = 0; x < blocks->block_side; x++) {
                     const uint64_t state = row[x];
-                    if (entropy_compute(state) == 1) {
+                    const uint8_t entropy = entropy_compute(state);
+                    switch (entropy) {
+                    case 0:
+                        fprintf(file, " . ");
+                        break;
+                    case 1:
                         fprintf(file, "%2d ", bitfield_get_nth_set_bit(state, 1));
-                    } else {
+                        break;
+                    default:
                         fprintf(file, " ? ");
+                        break;   
                     }
                 }
                 fprintf(file, gx < blocks->grid_side - 1 ? " | " : "\n");
@@ -143,7 +150,7 @@ blk_min_entropy(const wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
         block_entropy.location.x = i % blocks->block_side;
         block_entropy.location.y = i / blocks->block_side;
 
-        if (compare_blk_entropy_locs(&min_entropy_loc, &block_entropy) && block_entropy.entropy > 1){
+        if (block_entropy.entropy > 1 && compare_blk_entropy_locs(&min_entropy_loc, &block_entropy)){
             min_entropy_loc = block_entropy;
         }
     }
@@ -188,37 +195,6 @@ compare_grd_entropy_locs(const entropy_location* current_min, const entropy_loca
                    || (loc->location.gy == current_min->location.gy && loc->location.gx < current_min->location.gx)));
 }
 
-
-// static inline uint64_t
-// blk_filter_mask_for_column(wfc_blocks_ptr blocks,
-//                            uint32_t gy, uint32_t y,
-//                            uint64_t collapsed)
-// {
-//     return 0;
-// }
-//
-// static inline uint64_t
-// blk_filter_mask_for_row(wfc_blocks_ptr blocks,
-//                         uint32_t gx, uint32_t x,
-//                         uint64_t collapsed)
-// {
-//     return 0;
-// }
-//
-// static inline uint64_t
-// blk_filter_mask_for_block(wfc_blocks_ptr blocks,
-//                           uint32_t gy, uint32_t gx,
-//                           uint64_t collapsed)
-// {
-//     return 0;
-// }
-
-// bool
-// grd_check_error_in_column(wfc_blocks_ptr blocks, uint32_t gx)
-// {
-//     return 0;
-// }
-
 // Check for duplicate values in all blocks of the grid
 bool
 grd_check_block_errors(wfc_blocks_ptr blocks) {
@@ -232,8 +208,7 @@ grd_check_block_errors(wfc_blocks_ptr blocks) {
             uint64_t collapsed_mask = 0;
             for (uint32_t i = 0; i < block_size; i++) {
                 if (blk[i] == 0 || (blk[i] & collapsed_mask) != 0) {
-                    fprintf(stderr,"Failed block check\n");
-                    return false; // TODO: Afficher un message d'erreur ?
+                    return false;
                 }
 
                 if (entropy_compute(blk[i]) == 1) {
@@ -258,7 +233,6 @@ grd_check_row_errors(wfc_blocks_ptr blocks) {
 
                 for (uint32_t x = 0; x < blocks->block_side; x++) {
                     if (row[x] == 0 || (row[x] & collapsed_mask) != 0) {
-                        fprintf(stderr,"Failed row check\n");
                         return false;
                     }
 
@@ -286,7 +260,6 @@ grd_check_column_errors(wfc_blocks_ptr blocks) {
                 for (uint32_t y = 0; y < blocks->block_side; y++) {
                     const uint64_t state = col[y * blocks->block_side];
                     if (state == 0 || (state & collapsed_mask) != 0) {
-                        fprintf(stderr,"Failed column check\n");
                         return false;
                     }
 

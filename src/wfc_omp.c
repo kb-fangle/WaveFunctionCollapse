@@ -55,9 +55,8 @@ grd_check_block_errors_omp(wfc_blocks_ptr blocks) {
             uint64_t collapsed_mask = 0;
             for (uint32_t i = 0; i < block_size; i++) {
                 if (blk[i] == 0 || (blk[i] & collapsed_mask) != 0) {
-                    fprintf(stderr,"Failed block check\n");
                     err_blk = false;
-                    // return false; // TODO: Afficher un message d'erreur ?
+                    // return false;
                 }
 
                 if (entropy_compute(blk[i]) == 1) {
@@ -87,7 +86,6 @@ grd_check_row_errors_omp(wfc_blocks_ptr blocks) {
 
                 for (uint32_t x = 0; x < blocks->block_side; x++) {
                     if (row[x] == 0 || (row[x] & collapsed_mask) != 0) {
-                        fprintf(stderr,"Failed row check\n");
                         // return false;
                         err_row = false;
                     }
@@ -122,7 +120,6 @@ grd_check_column_errors_omp(wfc_blocks_ptr blocks) {
                 for (uint32_t y = 0; y < blocks->block_side; y++) {
                     const uint64_t state = col[y * blocks->block_side];
                     if (state == 0 || (state & collapsed_mask) != 0) {
-                        fprintf(stderr,"Failed column check\n");
                         // return false;
                         err_col = false;
                     }
