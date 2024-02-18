@@ -60,8 +60,7 @@ wfc_clone_into(wfc_blocks_ptr *const restrict ret_ptr, uint64_t seed, const wfc_
     const uint64_t block_size = blocks->block_side;
     wfc_blocks_ptr ret        = *ret_ptr;
 
-    const uint64_t size = (wfc_control_states_count(grid_size, block_size) * sizeof(uint64_t)) +
-                          (grid_size * grid_size * block_size * block_size * sizeof(uint64_t)) +
+    const uint64_t size = (grid_size * grid_size * block_size * block_size * sizeof(uint64_t)) +
                           sizeof(wfc_blocks);
 
     if (NULL == ret) {

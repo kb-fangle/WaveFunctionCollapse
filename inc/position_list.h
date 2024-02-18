@@ -14,7 +14,7 @@ typedef struct position_list {
     position_list_node* last;
 } position_list;
 
-static inline position_list position_list_init() {
+static inline position_list position_list_init(void) {
     position_list list = { NULL, NULL };
     return list;
 }

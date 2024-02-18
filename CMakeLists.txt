@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.17)
 project(WaveFunctionCollapse VERSION 0.1 LANGUAGES C)
 cmake_policy(SET CMP0009 NEW) # Do not follow symlinks with GLOB_RECURSE
 
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+find_package(Threads REQUIRED)
+find_package(OpenMP REQUIRED)
+
+
 STRING(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" insource)
 GET_FILENAME_COMPONENT(PARENTDIR ${CMAKE_SOURCE_DIR} PATH)
 STRING(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${PARENTDIR}" insourcesubdir)
@@ -26,10 +31,15 @@ file(GLOB_RECURSE WaveFunctionCollapse_INC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SO
 
 add_executable(wfc ${WaveFunctionCollapse_SRC} ${WaveFunctionCollapse_INC})
 target_include_directories(wfc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
-target_link_libraries(wfc  PRIVATE -pthread -fopenmp -lm)
-target_compile_options(wfc PRIVATE -pthread -fopenmp -std=c17)
+target_link_libraries(wfc  PRIVATE Threads::Threads OpenMP::OpenMP_C m)
+target_compile_options(wfc PRIVATE -march=native -std=c17)
+
+if (MAQAO)
+    target_compile_options(wfc PRIVATE -g -fno-omit-frame-pointer)
+endif()
+
 target_compile_options(wfc PRIVATE
-    -Wall #-Wextra -pedantic -Werror
+    -Wall -Wextra -pedantic #-Werror
     -Wshadow
     -Wcast-align -Wconversion -Wsign-conversion -Wdouble-promotion
     # -Wunused-variable
@@ -44,6 +54,7 @@ if(${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         -Wno-vla
         -Wno-unsafe-buffer-usage
         -Wno-declaration-after-statement
+        -Wno-documentation
     )
 elseif(${CMAKE_C_COMPILER_ID} STREQUAL "GNU")
     target_compile_options(wfc PRIVATE

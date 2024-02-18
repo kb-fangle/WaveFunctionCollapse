@@ -29,12 +29,6 @@ void wfc_clone_into(wfc_blocks_ptr *const restrict, uint64_t, const wfc_blocks_p
 /// Save the grid to a folder by creating a new file or overwrite it, on error kills the program.
 void wfc_save_into(const wfc_blocks_ptr, const char data[], const char folder[]);
 
-static inline uint64_t
-wfc_control_states_count(uint64_t grid_size, uint64_t block_size)
-{
-    return 0;
-}
-
 ///
 /// @brief Computes the address of the begining of a block
 ///

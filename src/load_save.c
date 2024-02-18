@@ -112,13 +112,13 @@ wfc_load(uint64_t seed, const char *path)
 
         if (line[0] == 's') {
             blkcnt          = block_side * block_side;
-            ret             = safe_malloc(blkcnt + wfc_control_states_count(1, block_side));
+            ret             = safe_malloc(blkcnt);
             ret->block_side = (uint8_t)block_side;
             ret->grid_side  = 1u;
         } else if (line[0] == 'g') {
             blkcnt          = block_side * block_side;
             blkcnt          = blkcnt * blkcnt;
-            ret             = safe_malloc(blkcnt + wfc_control_states_count(block_side, block_side));
+            ret             = safe_malloc(blkcnt);
             ret->block_side = (uint8_t)block_side;
             ret->grid_side  = (uint8_t)block_side;
         } else {
@@ -132,13 +132,12 @@ wfc_load(uint64_t seed, const char *path)
 
     {
         uint64_t mask       = 0;
-        const uint64_t base = wfc_control_states_count(ret->grid_side, ret->block_side);
         for (uint8_t i = 0; i < ret->block_side * ret->block_side; i += 1) {
             mask = bitfield_set(mask, i);  // initilise le mask avec tous les états possible
             // printf("nb bit=%d mask=%d puis %d\n",bitfield_count(mask),bitfield_get(mask,i));
         }
         ret->seed = seed;
-        for (uint64_t i = 0; i < blkcnt + base; i += 1) {
+        for (uint64_t i = 0; i < blkcnt; i += 1) {
             ret->states[i] = mask;
         }
     }
@@ -223,11 +222,10 @@ wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[
         exit(EXIT_FAILURE);
     }
 
-    const uint64_t starts = wfc_control_states_count(blocks->grid_side, blocks->block_side),
-                   ends   = (uint64_t)blocks->grid_side * blocks->grid_side * (uint64_t)blocks->block_side *
+    const uint64_t ends   = (uint64_t)blocks->grid_side * blocks->grid_side * (uint64_t)blocks->block_side *
                           blocks->block_side;
     for (uint64_t i = 0; i < ends; i += 1) {
-        if (fprintf(f, "%lu\n", blocks->states[starts + i]) < 0) {
+        if (fprintf(f, "%lu\n", blocks->states[i]) < 0) {
             fprintf(stderr, "failed to write: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
