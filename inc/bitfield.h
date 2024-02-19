@@ -27,6 +27,12 @@ bitfield_get(uint64_t flag, uint8_t index)
 }
 
 /// Count the number of set bits in an integer.
+#if defined (__has_builtin) && __has_builtin(__builtin_popcountll)
+static inline uint8_t
+bitfield_count(uint64_t x) {
+    return __builtin_popcountll(x);
+}
+#else
 static inline uint8_t
 bitfield_count(uint64_t x)
 {
@@ -40,6 +46,7 @@ bitfield_count(uint64_t x)
     x = (x + (x >> 4)) & m4;           //put count of each 8 bits into those 8 bits
     return (uint8_t)((x * h01) >> 56); //returns left 8 bits of x + (x<<8) + (x<<16) + (x<<24) + ...
 }
+#endif
 
 /// Get the integer with only the nth setted bit of the said integer.
 uint64_t bitfield_only_nth_set(uint64_t, uint8_t);

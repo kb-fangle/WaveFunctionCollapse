@@ -47,12 +47,6 @@ entropy_collapse_state(uint64_t state,
     return state;
 }
 
-uint8_t
-entropy_compute(uint64_t state)
-{
-    return bitfield_count(state);
-}
-
 void
 wfc_clone_into(wfc_blocks_ptr *const restrict ret_ptr, uint64_t seed, const wfc_blocks_ptr blocks)
 {
