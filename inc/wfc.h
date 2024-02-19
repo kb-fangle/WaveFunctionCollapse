@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bitfield.h"
 #include "types.h"
 
 #include "position_list.h"
@@ -28,12 +29,6 @@ void wfc_clone_into(wfc_blocks_ptr *const restrict, uint64_t, const wfc_blocks_p
 
 /// Save the grid to a folder by creating a new file or overwrite it, on error kills the program.
 void wfc_save_into(const wfc_blocks_ptr, const char data[], const char folder[]);
-
-static inline uint64_t
-wfc_control_states_count(uint64_t grid_size, uint64_t block_size)
-{
-    return 0;
-}
 
 ///
 /// @brief Computes the address of the begining of a block
@@ -73,10 +68,10 @@ void grd_print(FILE *const, const wfc_blocks_ptr block);
 // Entropy functions
 entropy_location blk_min_entropy(const wfc_blocks_ptr block, uint32_t gx, uint32_t gy);
 entropy_location grd_min_entropy(const wfc_blocks_ptr blocks);
-uint8_t entropy_compute(uint64_t);
+static inline uint8_t entropy_compute(uint64_t x) { return bitfield_count(x); }
 uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y, uint64_t seed, uint64_t iteration);
-
-
+bool compare_blk_entropy_locs(const entropy_location* current_min, const entropy_location* loc);
+bool compare_grd_entropy_locs(const entropy_location* current_min, const entropy_location* loc);
 ///
 /// @group Propagtion functions
 ///
@@ -84,16 +79,18 @@ uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t gy, uint32
 /// @param collapsed The state to collapse
 /// @param position_list A list containing the position of the states resolved after collapsing.
 ///
+/// @return true if at least one of the states changed, false otherwise.
+///
 /// @{
 
 /// Propagate a collapsed state in a block.
-void blk_propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint64_t collapsed, position_list* collapsed_stack);
+bool blk_propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint64_t collapsed, position_list* collapsed_stack);
 /// Propagate a collapsed state in a column.
-void grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx, uint32_t x, uint64_t collapsed, position_list* collapsed_stack);
+bool grd_propagate_column(wfc_blocks_ptr blocks, uint32_t gx, uint32_t x, uint64_t collapsed, position_list* collapsed_stack);
 /// Propagate a collapsed state in a row.
-void grd_propagate_row(wfc_blocks_ptr blocks, uint32_t gy, uint32_t y, uint64_t collapsed, position_list* collapsed_stack);
+bool grd_propagate_row(wfc_blocks_ptr blocks, uint32_t gy, uint32_t y, uint64_t collapsed, position_list* collapsed_stack);
 /// Propagate a collapsed state in the grid.
-void propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y);
+bool propagate(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y);
 
 /// }@
 

@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include "wfc.h"
+#include "wfc_omp.h"
 
 #include <string.h>
 #include <strings.h>
@@ -54,7 +55,7 @@ seeds_list_push_item(seeds_list *restrict list, seed_item item)
 {
     // First call, need to allocate the thing.
     if (NULL == list) {
-        static const uint64_t DEFAULT_SIZE = 10;
+        static const uint64_t DEFAULT_SIZE = 1;
         list                               = malloc(sizeof(seeds_list) + DEFAULT_SIZE * sizeof(seed_item));
         if (NULL == list) {
             fprintf(stderr, "failed to allocate seeds list\n");
