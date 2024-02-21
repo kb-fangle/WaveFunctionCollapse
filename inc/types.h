@@ -43,16 +43,21 @@ typedef struct {
 
 typedef wfc_blocks *wfc_blocks_ptr;
 
+typedef enum {
+    CPU, OMP, OMP2, TARGET, CUDA
+} solver_kind;
 
 typedef struct {
     const char *const data_file;
     const char *const output_folder;
     seeds_list *restrict seeds;
-    const uint64_t parallel;
+    const uint32_t parallel;
+    const solver_kind kind;
     bool (*const solver)(wfc_blocks_ptr);
 } wfc_args;
 
 typedef struct {
     const char *const name;
+    solver_kind kind;
     bool (*function)(wfc_blocks_ptr);
 } wfc_solver;

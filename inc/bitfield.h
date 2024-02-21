@@ -30,7 +30,7 @@ bitfield_get(uint64_t flag, uint8_t index)
 #if defined (__has_builtin) && __has_builtin(__builtin_popcountll)
 static inline uint8_t
 bitfield_count(uint64_t x) {
-    return __builtin_popcountll(x);
+    return (uint8_t)__builtin_popcountll(x);
 }
 #else
 static inline uint8_t
