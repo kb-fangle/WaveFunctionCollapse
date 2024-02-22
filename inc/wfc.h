@@ -116,10 +116,11 @@ bool solve_cuda(wfc_blocks_ptr);
 #endif
 
 static const wfc_solver solvers[] = {
-    { "cpu", solve_cpu },
-    { "omp", solve_openmp },
-    { "target", solve_target },
+    { "cpu", CPU, solve_cpu },
+    { "omp", OMP, solve_openmp },
+    { "omp2", OMP2, solve_cpu },
+    { "target", TARGET, solve_target },
 #if defined(WFC_CUDA)
-    { "cuda", solve_cuda },
+    { "cuda", CUDA, solve_cuda },
 #endif
 };

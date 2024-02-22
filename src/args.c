@@ -1,7 +1,7 @@
+#include "types.h"
 #define _GNU_SOURCE
 
 #include "wfc.h"
-#include "wfc_omp.h"
 
 #include <string.h>
 #include <strings.h>
@@ -198,7 +198,8 @@ wfc_parse_args(int argc, char **argv)
     int opt;
     seeds_list *restrict seeds     = NULL;
     const char *output             = NULL;
-    uint64_t parallel              = 1;
+    uint32_t parallel              = 1;
+    solver_kind kind               = CPU;
     bool (*solver)(wfc_blocks_ptr) = NULL;
     char *end                      = NULL;
 
@@ -231,6 +232,7 @@ wfc_parse_args(int argc, char **argv)
         case 'l': {
             for (uint64_t i = 0; i < sizeof(solvers) / sizeof(wfc_solver); i += 1) {
                 if (0 == strcasecmp(optarg, solvers[i].name)) {
+                    kind = solvers[i].kind;
                     solver = solvers[i].function;
                 }
             }
@@ -280,6 +282,7 @@ wfc_parse_args(int argc, char **argv)
         .seeds         = seeds,
         .output_folder = output,
         .parallel      = parallel,
+        .kind          = kind,
         .solver        = (NULL == solver) ? solvers[0].function : solver,
     };
 }
