@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.17)
 project(WaveFunctionCollapse VERSION 0.1 LANGUAGES C)
 cmake_policy(SET CMP0009 NEW) # Do not follow symlinks with GLOB_RECURSE
 
-set(THREADS_PREFER_PTHREAD_FLAG TRUE)
-find_package(Threads REQUIRED)
+include(CheckLanguage)
+
 find_package(OpenMP REQUIRED)
 
 
@@ -24,15 +24,31 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON) # Pass -fPIC
 set(CMAKE_COLOR_MAKEFILE            ON)
 set(CMAKE_COLOR_DIAGNOSTICS         ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS   ON) # Always to that...
-set(THREADS_PREFER_PTHREAD_FLAG     ON) # Pthread ftw
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 file(GLOB_RECURSE WaveFunctionCollapse_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 file(GLOB_RECURSE WaveFunctionCollapse_INC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/inc/*.h")
 
 add_executable(wfc ${WaveFunctionCollapse_SRC} ${WaveFunctionCollapse_INC})
 target_include_directories(wfc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
-target_link_libraries(wfc  PRIVATE Threads::Threads OpenMP::OpenMP_C m)
+target_link_libraries(wfc PRIVATE OpenMP::OpenMP_C m)
 target_compile_options(wfc PRIVATE -march=native -std=c17)
+
+check_language(CUDA)
+if (CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+
+    file(GLOB_RECURSE WaveFunctionCollapse_CUDA_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu")
+    add_library(cuda_solver OBJECT ${WaveFunctionCollapse_CUDA_SRC})
+    target_include_directories(cuda_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
+    target_compile_definitions(cuda_solver PRIVATE WFC_CUDA CUDA_FORCE_CDP1_IF_SUPPORTED)
+    target_compile_options(cuda_solver PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>)
+
+    target_compile_definitions(wfc PRIVATE WFC_CUDA)
+    target_link_libraries(wfc PRIVATE cuda_solver)
+else()
+    message(STATUS "No CUDA support")
+endif()
 
 if (MAQAO)
     target_compile_options(wfc PRIVATE -g -fno-omit-frame-pointer)

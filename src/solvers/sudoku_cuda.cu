@@ -1,399 +1,262 @@
-
+#include <cstdio>
 #include <cuda.h>
-#include "wfc.h"
+#include <limits>
+
 #include "bitfield.h"
 #include "helper_cuda.h"
+#include "md5.h"
+#include "types.h"
+#include "wfc_cuda.h"
+#include <stdio.h>
+#include <string.h>
 
-#if !defined(WFC_CUDA)
-#error "WDC_CUDA should be defined..."
-#endif
 
-/// Entropy location with a field for the cell's address and its state
-typedef struct {
-    uint64_t* cell;
-    uint64_t state;
-    uint8_t entropy;
-    position loc;
-} entropy_location_alt;
+__device__ uint8_t entropy_compute(uint64_t state) {
+    return __popcll(state);
+}
 
-/// stores in `out` the minimum entropy location between `out` and `in`
-/// Because the cells are laid out blocks by blocks in memory, we can directly
-/// order them using their address
-void entropy_min(entropy_location_alt* out, entropy_location_alt* in) {
-    if (in->entropy > 1 && (in->entropy < out->entropy || (in->entropy == out->entropy && in->cell < out->cell))) {
-        *out = *in;
+__device__ uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y, uint64_t seed, uint64_t iteration) {
+    uint8_t digest[16] = {0};
+    struct {
+        uint32_t gx, gy, x, y;
+        uint64_t seed, iteration;
+    } random_state = {gx, gy, x, y, seed, iteration};
+
+    md5((uint8_t*)&random_state, sizeof(random_state), digest);
+
+    uint8_t entropy = entropy_compute(state);
+    uint8_t collapse_index = (uint8_t)(*((uint64_t*)digest) % entropy + 1);
+    uint32_t real_index = bitfield_get_nth_set_bit(state, collapse_index);
+
+    state = bitfield_set(0, (uint8_t)real_index - 1);
+
+    return state;
+}
+
+__host__ __device__ bool entropy_is_less(uint8_t entropy, uint8_t other_entropy, uint32_t index, uint32_t other_index) {
+    return entropy < other_entropy || (entropy == other_entropy && index < other_index);
+}
+
+__global__ void compute_min_entropy(uint64_t* blocks, uint32_t* out) {
+    extern __shared__ uint32_t shared_memory[];
+
+    uint32_t block_index = threadIdx.y * blockDim.x + threadIdx.x;
+    uint32_t grid_index = blockIdx.y * gridDim.x + blockIdx.x;
+    const uint32_t block_size = blockDim.x * blockDim.y;
+    uint32_t global_index = grid_index * block_size + block_index;
+
+    uint32_t* indices = shared_memory;
+    uint32_t* entropies = shared_memory + block_size;
+
+    indices[block_index] = global_index;
+    entropies[block_index] = entropy_compute(blocks[global_index]);
+    if (entropies[block_index] == 1) {
+        entropies[block_index] = UINT32_MAX;
     }
-}
 
-static inline wfc_blocks *
-safe_cudamalloc(uint64_t blkcnt)
-{
-    uint64_t size   = sizeof(wfc_blocks) + sizeof(uint64_t) * blkcnt;
-    wfc_blocks *ret = (wfc_blocks *)malloc(size);
-    checkCudaErrors(cudaMalloc((void**)&ret, size));
-    // if (ret != NULL) {
-    //     return ret;
-    // } else {
-    //     fprintf(stderr, "failed to malloc %zu bytes\n", size);
-    //     exit(EXIT_FAILURE);
-    // }
-    return ret;
-}
-
-static inline uint64_t
-grd_at_idx(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
-{
-    uint32_t block_size = blocks->block_side * blocks->block_side;
-    return gy * blocks->grid_side * block_size + gx * block_size;
-}
-
-static inline uint64_t
-blk_at_idx(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y)
-{
-    
-    return grd_at(blocks,gx,gy) + y * blocks->block_side + x;
-}
-
-__global__ void cuda_entropy(wfc_blocks *blocks, entropy_location_alt min_entropy){
-    const uint32_t gx = blockIdx.x;
-    const uint32_t gy = blockIdx.y;
-    const uint32_t x = threadIdx.x;
-    const uint32_t y = threadIdx.y;
-    uint64_t* cell = blk_at(blocks, gx, gy, x, y);
-    entropy_location_alt loc = {cell,
-                                *cell,
-                                entropy_compute(*cell),
-                                { gx, gy, x, y },
-                                };
-
-    entropy_min(&min_entropy, &loc);
-}
-
-
-
-__global__ void cuda_blk_propagate(wfc_blocks_ptr blocks,
-              position loc, position_list* collapsed_stack)
-{
-    // Collapsed state in shared memory
-    __shared__ uint64_t collapsed;
-    if (threadIdx.x==0 && threadIdx.y==0) {
-        uint64_t* collapsed_cell = blk_at(blocks,loc.gx,loc.gy,loc.x,loc.y);
-        collapsed = *collapsed_cell;
-    }
-    __syncthreads();  
-    
-    uint64_t* cell = blk_at(blocks,loc.gx,loc.gy,threadIdx.x,threadIdx.y);
-    const uint64_t new_state = cell & ~collapsed;
-    
-    // Checking entropy of the cell with new state
-    if (new_state != cell && bitfield_count(new_state) == 1) {
-            position pos = { loc.gx, loc.gy, threadIdx.x, threadIdx.y };
-            position_list_push(collapsed_stack, pos);  // besoin mutex ??
-        }
-
-    cell = new_state;
-}
-
-__global__ void cuda_row_propagate(wfc_blocks_ptr blocks,
-              position loc, position_list* collapsed_stack)
-{
-    // Collapsed state in shared memory
-    __shared__ uint64_t collapsed;
-    if (threadIdx.x==0 && threadIdx.y==0) {
-        uint64_t* collapsed_cell = blk_at(blocks,loc.gx,loc.gy,loc.x,loc.y);
-        collapsed = *collapsed_cell;
-    }
-    __syncthreads();  
-    
-    // One block is useless
-    if (blockIdx.x != loc.gx) {
-
-        uint64_t* cell = blk_at(blocks,blockIdx.x,loc.gy,threadIdx.x,loc.y);
-        const uint64_t new_state = cell & ~collapsed;
-        
-        // Checking entropy of the cell with new state
-        if (new_state != cell && bitfield_count(new_state) == 1) {
-                position pos = { blockIdx.x, loc.gy, threadIdx.x, loc.y };
-                position_list_push(collapsed_stack, pos);  // besoin mutex ??
-            }
-
-        cell = new_state;
-
-    }
-}
-
-__global__ void cuda_col_propagate(wfc_blocks_ptr blocks,
-              position loc, position_list* collapsed_stack)
-{
-    // Collapsed state in shared memory
-    __shared__ uint64_t collapsed;
-    if (threadIdx.x==0 && threadIdx.y==0) {
-        uint64_t* collapsed_cell = blk_at(blocks,loc.gx,loc.gy,loc.x,loc.y);
-        collapsed = *collapsed_cell;
-    }
-    __syncthreads();  
-    
-    // One block is useless
-    if (blockIdx.y != loc.gy) {
-
-        uint64_t* cell = blk_at(blocks,loc.gx,blockIdx.y,loc.x,threadIdx.y);
-        const uint64_t new_state = cell & ~collapsed;
-        
-        // Checking entropy of the cell with new state
-        if (new_state != cell && bitfield_count(new_state) == 1) {
-                position pos = { loc.gx, blockIdx.y, loc.x, threadIdx.y };
-                position_list_push(collapsed_stack, pos);  // besoin mutex ??
-            }
-
-        cell = new_state;
-
-    }
-}
-
-__device__ bool d_valid = true;
-
-__global__ void cuda_blk_check(wfc_blocks_ptr blocks) {
-    const uint32_t gx = blockIdx.x;
-    const uint32_t gy = blockIdx.y;
-    const uint32_t x = threadIdx.x;
-    const uint32_t y = threadIdx.y;
-
-    // One mask per block
-    __shared__ uint64_t mask;
-
-    // Init mask
-    if (x==0 && y==0) {mask = 0;}
     __syncthreads();
 
-    uint64_t* cell = blk_at(blocks,gx,gy,x,y);
-    if (cell == 0 || (cell & mask) != 0) {
-        d_valid = false;
-    }
-
-    if (entropy_compute(cell) == 1) {
-        mask |= cell;    // besoin mutex ??
-    }
-}
- 
-__global__ cuda_row_check(wfc_blocks_ptr blocks) {
-    const uint32_t gx = threadIdx.x / blockDim.x;
-    const uint32_t gy = blockIdx.y / gridDim.y;
-    const uint32_t x = threadIdx.x % blockDim.x;
-    const uint32_t y = blockIdx.y % gridDim.y;
-
-    // One mask per block
-    __shared__ uint64_t mask;
-
-    // Init mask
-    if (mask == NULL) {
-        mask = 0    // besoin mutex ??
-    }
-
-    uint64_t* cell = blk_at(blocks,gx,gy,x,y);
-    if (cell == 0 || (cell & mask) != 0) {
-        d_valid = false;
-    }
-
-    if (entropy_compute(cell) == 1) {
-        mask |= cell;    // besoin mutex ??
-    }
-}
-
-__global__ cuda_col_check(wfc_blocks_ptr blocks) {
-    const uint32_t gx = blockIdx.x / gridDim.x;
-    const uint32_t gy = threadIdx.y / blockDim.y;
-    const uint32_t x = blockIdx.x % gridDim.x;
-    const uint32_t y = threadIdx.y % blockDim.y;
-
-    // One mask per block
-    __shared__ uint64_t mask;
-
-    // Init mask
-    if (mask == NULL) {
-        mask = 0    // besoin mutex ??
-    }
-
-    uint64_t* cell = blk_at(blocks,gx,gy,x,y);
-    if (cell == 0 || (cell & mask) != 0) {
-        d_valid = false;
-    }
-
-    if (entropy_compute(cell) == 1) {
-        mask |= cell;    // besoin mutex ??
-    }
-}
-
-
-
-bool
-solve_cuda(wfc_blocks_ptr blocks)
-{
-    
-    uint64_t iteration  = 0;
-
-    bool changed = true;
-    bool has_min_entropy = true;
-    bool valid = true;
-
-
-    // Streams init
-    cudaStream_t stream[3];
-    cudaStreamCreate (&stream[0]);
-    cudaStreamCreate (&stream[1]);
-    cudaStreamCreate (&stream[2]);
-
-    // Allocate once for all sudoku on device
-    wfc_blocks *d_blocks = NULL;
-    int block_size = blocks->block_side * blocks->block_side;
-    int blkcnt = block_size * block_size;
-    d_blocks = safe_cudamalloc(blkcnt);
-
-    // Allocate once for all min_entropy on device
-    entropy_location_alt min_entropy = malloc(sizeof(entropy_location_alt));
-    entropy_location_alt d_min_entropy = NULL;
-    checkCudaErrors(cudaMalloc((void**)&d_min_entropy, sizeof(entropy_location_alt)));
-    
-
-    // Allocate once for all collapsed_stack on device
-    position_list collapsed_stack = position_list_init();  // pas bon, besoin nouvelle fonction list cuda
-    position_list d_collapsed_stack = NULL;
-    checkCudaErrors(cudaMalloc((void**)&d_collapsed_stack, sizeof(position_list))); 
-
-    // Transfert data (H2D)
-    uint64_t size   = sizeof(wfc_blocks) + sizeof(uint64_t) * blkcnt;
-    checkCudaErrors(cudaMemcpy(d_blocks, blocks, size, cudaMemcpyHostToDevice));
-    bool d_valid = NULL;
-    // checkCudaErrors(cudaMemcpy(d_valid, valid, sizeof(bool), cudaMemcpyHostToDevice));
-
-    // Kernel configuration for full sudoku (2D)
-    dim3 dimBlock(blocks->block_side,blocks->block_side,1);
-    dim3 dimGrid(blocks->grid_side,blocks->grid_side,1);
-
-    // Kernel configuration for full sudoku with one full row (bloc 1D, grid 1D)
-    dim3 dimBlock_full_row(block_size,1,1);
-    dim3 dimGrid_full_row(1,block_size,1);
-
-    // Kernel configuration for full sudoku with one full col (bloc 1D, grid 1D)
-    dim3 dimBlock_full_col(1,block_size,1);
-    dim3 dimGrid_full_col(block_size,1,1);
-
-    // Kernel configuration for one block (bloc 2D)
-    dim3 dimBlock_blk(blocks->block_side,blocks->block_side,1);
-    dim3 dimGrid_blk(1,1,1);
-
-    // Kernel configuration for one row (bloc 1D, grid 1D)
-    dim3 dimBlock_row(blocks->block_side,1,1);
-    dim3 dimGrid_row(blocks->block_side,1,1);
-
-    // Kernel configuration for one col (bloc 1D, grid 1D)
-    dim3 dimBlock_col(1,blocks->block_side,1);
-    dim3 dimGrid_col(1,blocks->block_side,1);
-
-    
-    
-
-    while (changed && has_min_entropy && valid) {
-        /// Entropy
-        
-        // Init and transfert to device min_entropy (H2D)
-        min_entropy = { (uint64_t*)UINTPTR_MAX, UINT64_MAX, UINT8_MAX, { UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX } };
-        checkCudaErrors(cudaMemcpy(d_min_entropy, min_entropy, sizeof(entropy_location_alt), cudaMemcpyHostToDevice));
-
-        // Min entropy kernel launch
-        cuda_entropy<<<dimGrid,dimBlock>>>(d_blocks,d_min_entropy);
-        checkCudaErrors(cudaGetLastError());
-	    checkCudaErrors(cudaDeviceSynchronize());
-
-        // Retrieve the min entropy (D2H)
-        checkCudaErrors(cudaMemcpy(min_entropy, d_min_entropy, sizeof(entropy_location_alt), cudaMemcpyDeviceToHost));
-
-        has_min_entropy = min_entropy.loc.x != UINT32_MAX;
-
-        
-        if (has_min_entropy) {
-            const uint32_t gx = min_entropy.loc.gx;
-            const uint32_t gy = min_entropy.loc.gy;
-            const uint32_t x = min_entropy.loc.x;
-            const uint32_t y = min_entropy.loc.y;
-
-            position collapsed_pos = { gx, gy, x, y };
-                position_list_push(&collapsed_stack, collapsed_pos);
-
-            /// Collapse   
-            uint64_t collapsed_idx = blk_at_idx(blocks, gx, gy, x, y);
-            min_entropy->state = entropy_collapse_state(min_entropy->state, gx, gy, x, y, blocks->seed, iteration);
-            
-            // Transfer collapsed_cell to sudoku in device memory (H2D)
-            checkCudaErrors(cudaMemcpy(d_blocks->state[collapsed_idx], min_entropy->state, sizeof(uint64_t), cudaMemcpyHostToDevice));
-
-
-                /// Propagate
-                while (!position_list_is_empty(&collapsed_stack)) {
-                    collapsed_pos = position_list_pop(&collapsed_stack);
-
-                    // Transfert collapsed_stack to device (H2D)
-                    checkCudaErrors(cudaMemcpy(d_collapsed_stack, collapsed_stack, sizeof(position_list), cudaMemcpyHostToDevice));
-
-                    // Block propagate kernel launch
-                    cuda_blk_propagate<<<dimGrid_blk,dimBlock_blk>>>(d_blocks,
-                                                                    collapsed_pos,
-                                                                    d_collapsed_stack);
-                    checkCudaErrors(cudaGetLastError());
-                    checkCudaErrors(cudaDeviceSynchronize());  // à retirer après debug
-                    
-                    // Row propagate kernel launch
-                    cuda_row_propagate<<<dimGrid_row,dimBlock_row>>>(d_blocks,
-                                                                    collapsed_pos,
-                                                                    d_collapsed_stack);
-                    checkCudaErrors(cudaGetLastError());
-                    checkCudaErrors(cudaDeviceSynchronize());  // à retirer après debug
-
-                    // Col propagate kernel launch
-                    cuda_col_propagate<<<dimGrid_col,dimBlock_col>>>(d_blocks,
-                                                                    collapsed_pos,
-                                                                    d_collapsed_stack);
-                    checkCudaErrors(cudaGetLastError());
-                    checkCudaErrors(cudaDeviceSynchronize());
-
-                    // Retrieve the collapsed_stack (D2H)
-                    checkCudaErrors(cudaMemcpy(collapsed_stack,d_collapsed_stack, sizeof(position_list), cudaMemcpyDeviceToHost));
-                }
-
-            /// Verify
-
-            // Block check kernel launch
-            cuda_blk_check<<<dimGrid_blk,dimBlock_blk,0,stream[0]>>>(d_blocks);
-            checkCudaErrors(cudaGetLastError());
-            checkCudaErrors(cudaDeviceSynchronize());  // à retirer après debug
-
-            // Row check kernel launch
-            cuda_row_check<<<dimGrid_full_row,dimBlock_full_row,0,stream[1]>>>(d_blocks);
-            checkCudaErrors(cudaGetLastError());
-            checkCudaErrors(cudaDeviceSynchronize());  // à retirer après debug
-
-            // Col check kernel launch
-            cuda_col_check<<<dimGrid_full_col,dimBlock_full_col,0,stream[2]>>>(d_blocks);
-            checkCudaErrors(cudaGetLastError());
-            checkCudaErrors(cudaDeviceSynchronize());  
-
-            // Retrieve the verification result (D2H)
-            checkCudaErrors(cudaMemcpy(valid,d_valid, sizeof(bool), cudaMemcpyDeviceToHost));
+    uint32_t prev_offset = block_size;
+    uint32_t offset = block_size / 2;
+    while (offset > 0) {
+        if (block_index < offset
+            && entropy_is_less(entropies[block_index + offset], entropies[block_index], indices[block_index + offset], indices[block_index]))
+        {
+            __syncthreads();
+            indices[block_index] = indices[block_index + offset];
+            entropies[block_index] = entropies[block_index + offset];
         }
+
+        if (block_index == 0 && offset * 2 < prev_offset) {
+            if (entropy_is_less(entropies[prev_offset - 1], entropies[0], indices[prev_offset - 1], indices[0])) {
+                indices[0] = indices[prev_offset - 1];
+                entropies[0] = entropies[prev_offset - 1];
+            }
+        }
+    
+        prev_offset = offset;
+        offset /= 2;
+        __syncthreads();
+    }
+
+    if (block_index == 0) {
+        out[grid_index] = entropies[0];
+        out[grid_index + gridDim.x * gridDim.x] = indices[0];
+    }
+}
+
+template<typename T, typename U>
+__global__ void set_value(T* arr, U value, size_t size) {
+    uint32_t block_index = threadIdx.y * blockDim.x + threadIdx.x;
+    uint32_t grid_index = blockIdx.y * gridDim.x + blockIdx.x;
+    const uint32_t block_size = blockDim.x * blockDim.y;
+    uint32_t global_index = grid_index * block_size + block_index;
+
+    if (global_index < size) {
+        arr[global_index] = value;
+    }
+}
+
+__global__ void propagate_block(uint64_t* block, uint64_t collapsed, uint32_t collapsed_x, uint32_t collapsed_y, bool* changed_map, bool* collapsed_map) {
+    int id = threadIdx.y * blockDim.x + threadIdx.x;
+    if (threadIdx.x == collapsed_x && threadIdx.y == collapsed_y) {
+        block[id] = collapsed;
+    } else {
+        uint64_t new_state = block[id] & ~collapsed;
+        changed_map[id] = new_state != 0 && new_state != block[id];
+        collapsed_map[id] = new_state != block[id] && entropy_compute(new_state) == 1;
+        block[id] = new_state;
+    }
+}
+
+__global__ void propagate_row(uint64_t* blocks, uint64_t collapsed, uint32_t collapsed_grid_x, bool* changed_map, bool* collapsed_map) {
+    if (blockIdx.x != collapsed_grid_x) {
+        uint32_t id = blockIdx.x * blockDim.x * blockDim.x + threadIdx.x;
+
+        uint64_t new_state = blocks[id] & ~collapsed;
+        changed_map[id] = new_state != 0 && new_state != blocks[id];
+        collapsed_map[id] = new_state != blocks[id] && entropy_compute(new_state) == 1;
+        blocks[id] = new_state;
+    }
+}
+
+__global__ void propagate_column(uint64_t* blocks, uint64_t collapsed, uint32_t collapsed_grid_y, bool* changed_map, bool* collapsed_map) {
+    if (blockIdx.y != collapsed_grid_y) {
+        uint32_t id = blockIdx.y * blockDim.y * blockDim.y * blockDim.y + threadIdx.y * blockDim.y;
+
+        uint64_t new_state = blocks[id] & ~collapsed;
+        changed_map[id] = new_state != 0 && new_state != blocks[id];
+        collapsed_map[id] = new_state != blocks[id] && entropy_compute(new_state) == 1;
+        blocks[id] = new_state;
+    }
+}
+
+__global__ void check_errors(uint64_t* blocks, uint64_t* block_mask, uint64_t* row_mask, uint64_t* column_mask, bool* error) {
+    uint32_t block_index = threadIdx.y * blockDim.x + threadIdx.x;
+    uint32_t grid_index = blockIdx.y * gridDim.x + blockIdx.x;
+    const uint32_t block_size = blockDim.x * blockDim.y;
+    uint32_t global_index = grid_index * block_size + block_index;
+    
+    error[global_index] = blocks[global_index] == 0 || (entropy_compute(blocks[global_index]) != 1 && (
+                        (blocks[global_index] & block_mask[blockIdx.y * gridDim.x + blockIdx.x])
+                        || (blocks[global_index] & row_mask[blockIdx.y * blockDim.y + threadIdx.y])
+                        || (blocks[global_index] & column_mask[blockIdx.x * blockDim.x + threadIdx.x])));
+}
+
+__device__ bool propagate_gpu(wfc_cuda_blocks blocks, position collapsed_location, uint64_t collapsed) {
+    memset(blocks.d_changed, 0, blocks.sudoku_size * sizeof(*blocks.d_changed));
+    memset(blocks.d_collapsed, 0, blocks.sudoku_size * sizeof(*blocks.d_collapsed));
+
+
+    position pos = collapsed_location;
+    uint32_t i = blocks.cell_index(pos.gx, pos.gy, pos.x, pos.y);
+    // cudaStream_t streams[3];
+    // cudaStreamCreateWithFlags(&streams[0], cudaStreamNonBlocking);
+    // cudaStreamCreateWithFlags(&streams[1], cudaStreamNonBlocking);
+    // cudaStreamCreateWithFlags(&streams[2], cudaStreamNonBlocking);
+
+    do {
+        pos = blocks.position_at(i);
+        uint32_t block_index = blocks.cell_index(pos.gx, pos.gy, 0, 0);
+        uint32_t row_index = blocks.cell_index(0, pos.gy, 0, pos.y);
+        uint32_t column_index = blocks.cell_index(pos.gx, 0, pos.x, 0);
+
+        blocks.d_block_collapsed_mask[pos.gy * blocks.grid_side + pos.gx] |= collapsed;
+        blocks.d_row_collapsed_mask[pos.gy * blocks.block_side + pos.y] |= collapsed;
+        blocks.d_column_collapsed_mask[pos.gx * blocks.block_side + pos.x] |= collapsed;
+
+        propagate_block<<<block_propagation_grid_dim, block_propagation_block_dim, 0>>>(
+          &blocks.d_states[block_index], collapsed, pos.x, pos.y, &blocks.d_changed[block_index], &blocks.d_collapsed[block_index]);
+        propagate_row<<<row_propagation_grid_dim, row_propagation_block_dim, 0>>>(
+          &blocks.d_states[row_index], collapsed, pos.gx, &blocks.d_changed[row_index], &blocks.d_collapsed[row_index]);
+        propagate_column<<<col_propagation_grid_dim, col_propagation_block_dim, 0>>>(
+          &blocks.d_states[column_index], collapsed, pos.gy, &blocks.d_changed[column_index], &blocks.d_collapsed[column_index]);
+        cudaDeviceSynchronize();
+
+        // cudaDeviceSynchronize();
+        // cudaStreamSynchronize(streams[0]);
+        // cudaStreamSynchronize(streams[1]);
+        // cudaStreamSynchronize(streams[2]);
+
+        for (i = 0; i < blocks.sudoku_size; i++) {
+            if (blocks.d_collapsed[i]) {
+                blocks.d_collapsed[i] = 0;
+                collapsed = blocks.d_states[i];
+                break;
+            }
+        }
+
+    } while (i < blocks.sudoku_size);
+
+    for (uint32_t i = 0; i < blocks.sudoku_size; i++) {
+        if (blocks.d_changed) {
+            return true;
+        }
+    }
+
+    // cudaFree(streams[0]);
+    // cudaFree(streams[1]);
+    // cudaFree(streams[2]);
+
+    return false;
+}
+
+__global__ void solve_gpu(wfc_cuda_blocks blocks) {
+    bool changed = true;
+    bool valid = true;
+    bool has_min_entropy = true;
+    const size_t min_entropy_shared_mem_size = (sizeof(uint32_t) + sizeof(uint32_t)) * blocks.block_side * blocks.block_side;
+    bool ret = true;
+    uint64_t iteration = 0;
+    
+    memset(blocks.d_block_collapsed_mask, 0, blocks.grid_size * sizeof(*blocks.d_block_collapsed_mask));
+    memset(blocks.d_row_collapsed_mask, 0, blocks.grid_size * sizeof(*blocks.d_row_collapsed_mask));
+    memset(blocks.d_column_collapsed_mask, 0, blocks.grid_size * sizeof(*blocks.d_column_collapsed_mask));
+
+    while (changed && valid) {
+        compute_min_entropy<<<global_grid_dim, global_block_dim, min_entropy_shared_mem_size>>>(blocks.d_states, blocks.d_min_entropy);
+        cudaDeviceSynchronize();
+
+        uint32_t min_entropy = UINT32_MAX;
+        uint32_t min_index = UINT32_MAX;
+        for (int i = 0; i < blocks.grid_size; i++) {
+            if (entropy_is_less(blocks.d_min_entropy[i], min_entropy, blocks.d_min_entropy[i + blocks.grid_size], min_index)) {
+                min_entropy = blocks.d_min_entropy[i];
+                min_index = blocks.d_min_entropy[i + blocks.grid_size];
+            }
+        }
+
+        if (min_entropy == UINT32_MAX) {
+            has_min_entropy = false;
+            break;
+        }
+
+        position min_entropy_loc = blocks.position_at(min_index);
+        uint64_t collapsed_state = entropy_collapse_state(blocks.d_states[min_index], min_entropy_loc.gx, min_entropy_loc.gy, min_entropy_loc.x, min_entropy_loc.y, blocks.seed, iteration);
+
+        changed = propagate_gpu(blocks, min_entropy_loc, collapsed_state);
+
+        check_errors<<<global_grid_dim, global_block_dim>>>(blocks.d_states, blocks.d_block_collapsed_mask, blocks.d_row_collapsed_mask, blocks.d_column_collapsed_mask, blocks.d_changed);
+        cudaDeviceSynchronize();
         
+        for (int i = 0; i < blocks.sudoku_size; i++) {
+            if (blocks.d_changed[i]) {
+                valid = false;
+                // break;
+            }
+        }
+
         iteration++;
     }
 
-    // Retrieve the sudoku (D2H)
-    checkCudaErrors(cudaMemcpy(blocks,d_blocks, size, cudaMemcpyDeviceToHost));
+    blocks.d_changed[0] = changed && valid && !has_min_entropy;
+}
 
-    cudaStreamDestroy(stream[0]);
-    cudaStreamDestroy(stream[1]);
-    cudaStreamDestroy(stream[2]);
+bool solve_cuda(wfc_cuda_blocks* blocks) {
+    bool ret;
 
-    free(min_entropy);
-    cudaFree(d_blocks);
-    cudaFree(d_min_entropy);
-    cudaFree(d_collapsed_stack);
+    solve_gpu<<<1, 1>>>(*blocks);
+    cudaMemcpy(&ret, blocks->d_changed, sizeof(ret), cudaMemcpyDeviceToHost);
 
-    return changed && !has_min_entropy && valid;
+    return ret;
 }

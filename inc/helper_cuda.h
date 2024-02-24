@@ -75,7 +75,7 @@ inline void __getLastCudaError(const char *errorMessage, const char *file,
 }
 
 // Beginning of GPU Architecture definitions
-int _ConvertSMVer2Cores(int major, int minor)
+inline int _ConvertSMVer2Cores(int major, int minor)
 {
   // Defines for GPU Architecture types (using the SM version to determine
   // the # of cores per SM

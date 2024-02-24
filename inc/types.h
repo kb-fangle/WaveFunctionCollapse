@@ -1,5 +1,10 @@
 #pragma once
 
+#ifdef __cplusplus
+#define restrict
+extern "C" {
+#endif
+
 #include <inttypes.h>
 #include <stdbool.h>
 
@@ -61,3 +66,8 @@ typedef struct {
     solver_kind kind;
     bool (*function)(wfc_blocks_ptr);
 } wfc_solver;
+
+#ifdef __cplusplus
+}
+#undef restrict
+#endif

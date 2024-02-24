@@ -1,8 +1,10 @@
-#include "types.h"
 #define _GNU_SOURCE
 
+#include "args.h"
 #include "wfc.h"
+#include "types.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <getopt.h>
@@ -126,7 +128,8 @@ seeds_list_pop(seeds_list *restrict *const list_ptr)
     else if (list->items[0].type == seed_item_tuple) {
         const uint64_t ret = list->items[0].content.from;
         list->items[0].content.from += 1;
-        if (list->items[0].content.from >= list->items[0].content.to) {
+        // use > instead of >= to make the range inclusive
+        if (list->items[0].content.from > list->items[0].content.to) {
             list_pop(list_ptr);
         }
         return ret;
