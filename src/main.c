@@ -13,6 +13,8 @@ void cpu_main_loop(wfc_args args, wfc_blocks_ptr init) {
     uint64_t iterations      = 0;
     wfc_blocks_ptr blocks    = NULL;
 
+    uint8_t* entropies = (uint8_t*)malloc(init->block_side * init->block_side * init->grid_side * init->grid_side * sizeof(uint8_t));
+
     const uint64_t max_iterations = count_seeds(args.seeds);
     const double start            = omp_get_wtime();
 
@@ -26,6 +28,7 @@ void cpu_main_loop(wfc_args args, wfc_blocks_ptr init) {
         }
 
         wfc_clone_into(&blocks, next_seed, init);
+        blocks->entropies = entropies;
         const bool solved = args.solver(blocks);
         iterations += 1;
 
@@ -44,6 +47,8 @@ void cpu_main_loop(wfc_args args, wfc_blocks_ptr init) {
                 ((double)iterations / (double)(max_iterations)) * 100.0,
                 omp_get_wtime() - start);
     }
+    
+    free(entropies);
 }
 
 void
@@ -56,6 +61,7 @@ omp_main_loop(wfc_args args, wfc_blocks_ptr init) {
 
     #pragma omp parallel shared(quit,iterations)
     {
+        uint8_t* entropies = (uint8_t*)malloc(init->block_side * init->block_side * init->grid_side * init->grid_side * sizeof(uint8_t));
         uint64_t next_seed;
         wfc_blocks_ptr blocks = NULL;
         bool has_next_seed = false;
@@ -73,6 +79,7 @@ omp_main_loop(wfc_args args, wfc_blocks_ptr init) {
             }
 
             wfc_clone_into(&blocks, next_seed, init);
+            blocks->entropies = entropies;
 
             bool solved = solve_cpu(blocks);
             iterations++;
@@ -91,6 +98,8 @@ omp_main_loop(wfc_args args, wfc_blocks_ptr init) {
                     omp_get_wtime() - start);
             }
         }
+
+        free(entropies);
     }
 }
 

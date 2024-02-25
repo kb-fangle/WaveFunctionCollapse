@@ -3,32 +3,13 @@
 #include "bitfield.h"
 #include "wfc.h"
 #include "wfc_omp.h"
+#include "md5.h"
 
 #include <omp.h>
-
-
-/// Entropy location with a field for the cell's address
-typedef struct {
-    uint64_t* cell;
-    uint8_t entropy;
-    position loc;
-} entropy_location_alt;
-
-/// stores in `out` the minimum entropy location between `out` and `in`
-/// Because the cells are laid out blocks by blocks in memory, we can directly
-/// order them using their address
-void entropy_min(entropy_location_alt* out, entropy_location_alt* in) {
-    if (in->entropy > 1 && (in->entropy < out->entropy || (in->entropy == out->entropy && in->cell < out->cell))) {
-        *out = *in;
-    }
-}
 
 bool
 solve_openmp(wfc_blocks_ptr blocks)
 {
-    #pragma omp declare reduction(min : entropy_location_alt : entropy_min(&omp_out, &omp_in))\
-                        initializer(omp_priv = { (uint64_t*)UINTPTR_MAX, UINT8_MAX, { UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX } })
-
     uint64_t iteration  = 0;
 
     bool changed = true;
@@ -40,53 +21,80 @@ solve_openmp(wfc_blocks_ptr blocks)
     omp_lock_t stack_lock;
     omp_init_lock(&stack_lock);
 
+    const uint32_t sudoku_size = blocks->block_side * blocks->block_side * blocks->grid_side * blocks->grid_side;
+
     while (changed && has_min_entropy && valid) {
-        // Compute the min entropy location
-        entropy_location_alt min_entropy = { (uint64_t*)UINTPTR_MAX, UINT8_MAX, { UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX } };
-
-        #pragma omp parallel default(shared)
+        #pragma omp parallel default(shared) firstprivate(sudoku_size)
         {
-        #pragma omp for collapse(4) reduction(min: min_entropy)
-        for (uint32_t gy=0; gy < blocks->grid_side; gy++){
-            for (uint32_t gx=0; gx < blocks->grid_side; gx++){
-                for (uint32_t y = 0; y < blocks->block_side; y++) {
-                    for (uint32_t x = 0; x < blocks->block_side; x++) {
-                        uint64_t* cell = blk_at(blocks, gx, gy, x, y);
-                        entropy_location_alt loc = {
-                                cell,
-                                entropy_compute(*cell),
-                                { gx, gy, x, y },
-                        };
-                        entropy_min(&min_entropy, &loc);
-                    }
-                }
-            }
+        // Compute the min entropy location
+        #pragma omp for
+        for (uint32_t i = 0; i < sudoku_size; i++) {
+            blocks->entropies[i] = entropy_compute(blocks->states[i]);
         }
-
     
         #pragma omp single
         {
-            has_min_entropy = min_entropy.loc.x != UINT32_MAX;
+            uint8_t min_entropy = UINT8_MAX;
+            uint32_t nb_min_entropy = 0;
+
+            for (uint32_t i = 0; i < sudoku_size; i++) {
+                if (blocks->entropies[i] > 1 && blocks->entropies[i] < min_entropy) {
+                    min_entropy = blocks->entropies[i];
+                    nb_min_entropy = 0;
+                }
+
+                nb_min_entropy += blocks->entropies[i] == min_entropy;
+            }
+
+            has_min_entropy = min_entropy != UINT8_MAX;
+
 
             if (has_min_entropy) {
-                // propagate
-                const uint32_t gx = min_entropy.loc.gx;
-                const uint32_t gy = min_entropy.loc.gy;
-                const uint32_t x = min_entropy.loc.x;
-                const uint32_t y = min_entropy.loc.y;
+                // choose the collapsed cell at random
+                uint32_t digest[4];
+                struct {
+                    uint64_t seed;
+                    uint8_t a, b, c, d;
+                } random_state = {
+                    blocks->seed,
+                    blocks->entropies[nb_min_entropy - 1],
+                    blocks->entropies[0],
+                    blocks->entropies[nb_min_entropy << 1],
+                    blocks->entropies[nb_min_entropy << 2],
+                };
 
-                position collapsed_pos = { gx, gy, x, y };
+                md5((uint8_t*)&random_state, sizeof(random_state), (uint8_t*)digest);
+                uint32_t id = digest[1] % nb_min_entropy;
+
+                position collapsed_pos;
+                for (uint32_t i = 0; i < sudoku_size; i++) {
+                    if (blocks->entropies[i] == min_entropy) {
+                        if (id == 0) {
+                            collapsed_pos = position_at(blocks, i);
+                            break;
+                        } else {
+                            id--;
+                        }
+                    }
+                }
+
+                const uint32_t gx = collapsed_pos.gx;
+                const uint32_t gy = collapsed_pos.gy;
+                const uint32_t x = collapsed_pos.x;
+                const uint32_t y = collapsed_pos.y;
+
                 position_list_push(&collapsed_stack, collapsed_pos);
                 
                 uint64_t* collapsed_cell = blk_at(blocks, gx, gy, x, y);
                 *collapsed_cell = entropy_collapse_state(*collapsed_cell, gx, gy, x, y, blocks->seed, iteration);
                 
+                // propagate
                 changed = false;
 
                 while (!position_list_is_empty(&collapsed_stack)) {
                     collapsed_pos = position_list_pop(&collapsed_stack);
                     
-                    uint64_t* collapsed_cell = blk_at(blocks, collapsed_pos.gx, collapsed_pos.gy, collapsed_pos.x, collapsed_pos.y);
+                    collapsed_cell = blk_at(blocks, collapsed_pos.gx, collapsed_pos.gy, collapsed_pos.x, collapsed_pos.y);
                     const uint64_t collapsed = *collapsed_cell;
                     
                     bool changed_block, changed_row, changed_col;

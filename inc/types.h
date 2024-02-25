@@ -24,7 +24,6 @@ typedef struct {
     uint32_t y;
 } position;
 
-
 typedef struct {
     position location;
     uint8_t entropy;
@@ -42,6 +41,7 @@ typedef struct {
     uint32_t _3;
 
     uint64_t seed;
+    uint8_t* entropies;
 
     uint64_t states[];
 } wfc_blocks;

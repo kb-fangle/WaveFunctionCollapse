@@ -40,19 +40,37 @@ blk_at(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y)
     return grd_at(blocks,gx,gy) + y * blocks->block_side + x;
 }
 
+///
+/// @brief Computes the position of a cell given its index
+///
+/// @param blocks The grid
+/// @param i the cell's 1D index
+/// @param The 2D position (gx, gy, x, y) of the cell
+///
+static inline position
+position_at(wfc_blocks_ptr blocks, uint32_t index) {
+    position pos;
+    uint32_t block_size = blocks->block_side * blocks->block_side;
+    pos.gx = (index / block_size) % blocks->grid_side;
+    pos.gy = index / (blocks->grid_side * block_size);
+    index -= pos.gy * blocks->grid_side * block_size + pos.gx * block_size;
+    pos.x = index % blocks->block_side;
+    pos.y = index / blocks->block_side;
+    return pos;
+}
+
 
 // Printing functions
-void blk_print(FILE *const, const wfc_blocks_ptr block, uint32_t gx, uint32_t gy);
-void grd_print(FILE *const, const wfc_blocks_ptr block);
+/// Print a block to `out`
+void blk_print(FILE *const out, const wfc_blocks_ptr block, uint32_t gx, uint32_t gy);
+/// Print the grid to `out`
+void grd_print(FILE *const out, const wfc_blocks_ptr block);
 
 
 // Entropy functions
-entropy_location blk_min_entropy(const wfc_blocks_ptr block, uint32_t gx, uint32_t gy);
-entropy_location grd_min_entropy(const wfc_blocks_ptr blocks);
+position grd_min_entropy(const wfc_blocks_ptr blocks);
 static inline uint8_t entropy_compute(uint64_t x) { return bitfield_count(x); }
 uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t gy, uint32_t x, uint32_t y, uint64_t seed, uint64_t iteration);
-bool compare_blk_entropy_locs(const entropy_location* current_min, const entropy_location* loc);
-bool compare_grd_entropy_locs(const entropy_location* current_min, const entropy_location* loc);
 ///
 /// @group Propagtion functions
 ///

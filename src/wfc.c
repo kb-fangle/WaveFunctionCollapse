@@ -122,70 +122,58 @@ void grd_print(FILE *const file, const wfc_blocks_ptr blocks) {
     }
 }
 
-entropy_location
-blk_min_entropy(const wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy)
-{
-    // use a location at `UINT32_MAX` to indicate that there were no cell
-    // with minimal entropy
-    entropy_location min_entropy_loc = {
-        .entropy = UINT8_MAX,
-        .location = { .x = UINT32_MAX, .y = UINT32_MAX, .gx = gx, .gy = gy }
-    };
-
-    entropy_location block_entropy = min_entropy_loc;
-
-    // blk_print(stdout,blocks,gx,gy);
-
-    // On parcours chaque case
-    uint64_t* block_loc = grd_at(blocks,gx,gy);
-    for (uint32_t i=0; i < blocks->block_side*blocks->block_side;i++){
-        block_entropy.entropy = entropy_compute(block_loc[i]);
-        block_entropy.location.x = i % blocks->block_side;
-        block_entropy.location.y = i / blocks->block_side;
-
-        if (block_entropy.entropy > 1 && compare_blk_entropy_locs(&min_entropy_loc, &block_entropy)){
-            min_entropy_loc = block_entropy;
-        }
-    }
-    
-    return min_entropy_loc;
-}
-
-entropy_location 
+position 
 grd_min_entropy(const wfc_blocks_ptr blocks)
 {
-    entropy_location min_entropy_loc = {
-        .entropy = UINT8_MAX,
-        .location = { .x = UINT32_MAX, .y = UINT32_MAX }
+    position none = { UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX };
+
+    uint32_t sudoku_size = blocks->block_side * blocks->block_side * blocks->grid_side * blocks->grid_side;
+
+    uint8_t min_entropy = UINT8_MAX;
+    uint32_t nb_min_entropy = 0;
+
+    for (uint32_t i = 0; i < sudoku_size; i++) {
+        blocks->entropies[i] = entropy_compute(blocks->states[i]);
+    }
+
+    for (uint32_t i = 0; i < sudoku_size; i++) {
+        if (blocks->entropies[i] > 1 && blocks->entropies[i] < min_entropy) {
+            min_entropy = blocks->entropies[i];
+            nb_min_entropy = 0;
+        }
+
+        nb_min_entropy += blocks->entropies[i] == min_entropy;
+    }
+
+    if (min_entropy == UINT8_MAX) {
+        return none;
+    }
+
+    uint32_t digest[4];
+    struct {
+        uint64_t seed;
+        uint8_t a, b, c, d;
+    } random_state = {
+        blocks->seed,
+        blocks->entropies[nb_min_entropy - 1],
+        blocks->entropies[0],
+        blocks->entropies[nb_min_entropy << 1],
+        blocks->entropies[nb_min_entropy << 2],
     };
 
-    for (uint32_t gy=0; gy < blocks->grid_side; gy++){
-        for (uint32_t gx=0; gx < blocks->grid_side; gx++){
-            entropy_location block_entropy = blk_min_entropy(blocks,gx,gy);
-            if (compare_grd_entropy_locs(&min_entropy_loc, &block_entropy)){
-                min_entropy_loc = block_entropy;
+    md5((uint8_t*)&random_state, sizeof(random_state), (uint8_t*)digest);
+    uint32_t id = digest[1] % nb_min_entropy;
+    for (uint32_t i = 0; i < sudoku_size; i++) {
+        if (blocks->entropies[i] == min_entropy) {
+            if (id == 0) {
+                return position_at(blocks, i);
+            } else {
+                id--;
             }
         }
     }
-    // grd_print(stdout,blocks);
 
-    return min_entropy_loc;
-}
-
-bool 
-compare_blk_entropy_locs(const entropy_location* current_min, const entropy_location* loc) {
-    return loc->entropy < current_min->entropy
-           || (loc->entropy == current_min->entropy
-               && (loc->location.y < current_min->location.y
-                   || (loc->location.y == current_min->location.y && loc->location.x < current_min->location.x)));
-}
-
-bool 
-compare_grd_entropy_locs(const entropy_location* current_min, const entropy_location* loc) {
-    return loc->entropy < current_min->entropy
-           || (loc->entropy == current_min->entropy
-               && (loc->location.gy < current_min->location.gy
-                   || (loc->location.gy == current_min->location.gy && loc->location.gx < current_min->location.gx)));
+    return none;
 }
 
 // Check for duplicate values in all blocks of the grid

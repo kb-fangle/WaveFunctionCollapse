@@ -36,52 +36,9 @@ static __host__ __device__ bool entropy_is_less(uint8_t entropy, uint8_t other_e
     return entropy < other_entropy || (entropy == other_entropy && index < other_index);
 }
 
-static __global__ void compute_min_entropy(uint64_t* blocks, uint32_t* out) {
-    extern __shared__ uint32_t shared_memory[];
-
-    uint32_t block_index = threadIdx.y * blockDim.x + threadIdx.x;
-    uint32_t grid_index = blockIdx.y * gridDim.x + blockIdx.x;
-    const uint32_t block_size = blockDim.x * blockDim.y;
-    uint32_t global_index = grid_index * block_size + block_index;
-
-    uint32_t* indices = shared_memory;
-    uint32_t* entropies = shared_memory + block_size;
-
-    indices[block_index] = global_index;
-    entropies[block_index] = entropy_compute_cuda(blocks[global_index]);
-    if (entropies[block_index] == 1) {
-        entropies[block_index] = UINT32_MAX;
-    }
-
-    __syncthreads();
-
-    uint32_t prev_offset = block_size;
-    uint32_t offset = block_size / 2;
-    while (offset > 0) {
-        if (block_index < offset
-            && entropy_is_less(entropies[block_index + offset], entropies[block_index], indices[block_index + offset], indices[block_index]))
-        {
-            __syncthreads();
-            indices[block_index] = indices[block_index + offset];
-            entropies[block_index] = entropies[block_index + offset];
-        }
-
-        if (block_index == 0 && offset * 2 < prev_offset) {
-            if (entropy_is_less(entropies[prev_offset - 1], entropies[0], indices[prev_offset - 1], indices[0])) {
-                indices[0] = indices[prev_offset - 1];
-                entropies[0] = entropies[prev_offset - 1];
-            }
-        }
-    
-        prev_offset = offset;
-        offset /= 2;
-        __syncthreads();
-    }
-
-    if (block_index == 0) {
-        out[grid_index] = entropies[0];
-        out[grid_index + gridDim.x * gridDim.x] = indices[0];
-    }
+static __global__ void compute_entropies(uint64_t* blocks, uint8_t* out) {
+    uint32_t id = blockIdx.x * blockDim.x + threadIdx.x;
+    out[id] = entropy_compute_cuda(blocks[id]);
 }
 
 static __global__ void propagate_block(uint64_t* block, uint64_t collapsed, uint32_t collapsed_x, uint32_t collapsed_y, bool* changed_map, bool* collapsed_map, uint64_t* mask) {
@@ -220,33 +177,63 @@ bool solve_cuda(wfc_cuda_blocks& blocks) {
     const dim3 block_dim(blocks.block_side, blocks.block_side);
 
     while (changed && valid) {
-        cudaMemcpyAsync(blocks.h_states, blocks.d_states, blocks.sudoku_size * sizeof(*blocks.h_states), cudaMemcpyDeviceToHost, blocks.streams[0]);
         cudaMemsetAsync(blocks.d_changed, 0, blocks.sudoku_size * sizeof(*blocks.d_changed), blocks.streams[2]);
 
-        compute_min_entropy<<<grid_dim, block_dim, min_entropy_shared_mem_size, blocks.streams[1]>>>(blocks.d_states, blocks.d_min_entropy);
+        cudaStreamSynchronize(blocks.streams[0]);
+        cudaMemcpyAsync(blocks.h_states, blocks.d_states, blocks.sudoku_size * sizeof(*blocks.h_states), cudaMemcpyDeviceToHost, blocks.streams[0]);
 
-        cudaMemcpyAsync(blocks.h_min_entropy, blocks.d_min_entropy, 2 * blocks.grid_size * sizeof(*blocks.d_min_entropy), cudaMemcpyDeviceToHost, blocks.streams[1]);
-
-        uint32_t min_entropy = UINT32_MAX;
-        uint32_t min_index = UINT32_MAX;
+        compute_entropies<<<blocks.grid_side * blocks.grid_side, blocks.block_side * blocks.block_side, 0, blocks.streams[1]>>>(blocks.d_states, blocks.d_entropies);
+        cudaMemcpyAsync(blocks.h_entropies, blocks.d_entropies, blocks.sudoku_size * sizeof(uint8_t), cudaMemcpyDeviceToHost, blocks.streams[1]);
 
         cudaStreamSynchronize(blocks.streams[1]);
 
-        for (int i = 0; i < blocks.grid_size; i++) {
-            if (entropy_is_less(blocks.h_min_entropy[i], min_entropy, blocks.h_min_entropy[i + blocks.grid_size], min_index)) {
-                min_entropy = blocks.h_min_entropy[i];
-                min_index = blocks.h_min_entropy[i + blocks.grid_size];
+        uint8_t min_entropy = UINT8_MAX;
+        uint32_t nb_min_entropy = 0;
+
+        for (uint32_t i = 0; i < blocks.sudoku_size; i++) {
+            if (blocks.h_entropies[i] > 1 && blocks.h_entropies[i] < min_entropy) {
+                min_entropy = blocks.h_entropies[i];
+                nb_min_entropy = 0;
             }
+
+            nb_min_entropy += blocks.h_entropies[i] == min_entropy;
         }
 
-        if (min_entropy == UINT32_MAX) {
+        if (min_entropy == UINT8_MAX) {
             has_min_entropy = false;
             break;
         }
 
-        position min_entropy_loc = blocks.position_at(min_index);
+        uint32_t digest[4];
+        struct {
+            uint64_t seed;
+            uint8_t a, b, c, d;
+        } random_state = {
+            blocks.seed,
+            blocks.h_entropies[nb_min_entropy - 1],
+            blocks.h_entropies[0],
+            blocks.h_entropies[nb_min_entropy << 1],
+            blocks.h_entropies[nb_min_entropy << 2],
+        };
+
+        md5((uint8_t*)&random_state, sizeof(random_state), (uint8_t*)digest);
+        uint32_t id = digest[1] % nb_min_entropy;
+        position min_entropy_loc;
+        uint32_t min_entropy_index;
+        for (uint32_t i = 0; i < blocks.sudoku_size; i++) {
+            if (blocks.h_entropies[i] == min_entropy) {
+                if (id == 0) {
+                    min_entropy_loc = blocks.position_at(i);
+                    min_entropy_index = i;
+                    break;
+                } else {
+                    id--;
+                }
+            }
+        }
+        
         cudaStreamSynchronize(blocks.streams[0]);
-        uint64_t collapsed_state = entropy_collapse_state(blocks.h_states[min_index], min_entropy_loc.gx, min_entropy_loc.gy, min_entropy_loc.x, min_entropy_loc.y, blocks.seed, iteration);
+        uint64_t collapsed_state = entropy_collapse_state(blocks.h_states[min_entropy_index], min_entropy_loc.gx, min_entropy_loc.gy, min_entropy_loc.x, min_entropy_loc.y, blocks.seed, iteration);
 
         changed = propagate(blocks, min_entropy_loc, collapsed_state);
 
