@@ -41,7 +41,7 @@ if (CMAKE_CUDA_COMPILER)
     file(GLOB_RECURSE WaveFunctionCollapse_CUDA_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu")
     add_library(cuda_solver OBJECT ${WaveFunctionCollapse_CUDA_SRC})
     target_include_directories(cuda_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
-    target_compile_definitions(cuda_solver PRIVATE WFC_CUDA CUDA_FORCE_CDP1_IF_SUPPORTED)
+    target_compile_definitions(cuda_solver PRIVATE WFC_CUDA $<$<CONFIG:Release>:WFC_CUDA_NO_CHECK>)
     target_compile_options(cuda_solver PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>)
 
     target_compile_definitions(wfc PRIVATE WFC_CUDA)
@@ -58,7 +58,7 @@ target_compile_options(wfc PRIVATE
     -Wall -Wextra -pedantic #-Werror
     -Wshadow
     -Wcast-align -Wconversion -Wsign-conversion -Wdouble-promotion
-    # -Wunused-variable
+    -Wunused-variable
     -Wmisleading-indentation
     -Wnull-dereference
     -Wformat=2
@@ -71,10 +71,12 @@ if(${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         -Wno-unsafe-buffer-usage
         -Wno-declaration-after-statement
         -Wno-documentation
+        -Wno-missing-prototypes
+        -Wno-covered-switch-default
     )
 elseif(${CMAKE_C_COMPILER_ID} STREQUAL "GNU")
     target_compile_options(wfc PRIVATE
         -Wno-switch
-        -Wno-unsafe-buffer-usage
+        # -Wno-unsafe-buffer-usage
     )
 endif()

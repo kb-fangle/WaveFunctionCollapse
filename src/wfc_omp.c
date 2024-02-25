@@ -1,28 +1,20 @@
-#include <stdint.h>
 #define _GNU_SOURCE
 
+#include <stdint.h>
+
+#include "bitfield.h"
+#include "position_list.h"
+#include "types.h"
 #include "wfc.h"
 #include "wfc_omp.h"
-#include "bitfield.h"
-#include "md5.h"
-#include "types.h"
-#include "position_list.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <limits.h>
-#include <errno.h>
-#include <string.h>
-#include <strings.h>
-
 
 bool
-grd_check_block_errors_omp(wfc_blocks_ptr blocks) {
+grd_check_block_errors_omp(wfc_blocks_ptr blocks)
+{
     const uint32_t block_size = blocks->block_side * blocks->block_side;
     for (uint32_t gy = 0; gy < blocks->grid_side; gy++) {
         for (uint32_t gx = 0; gx < blocks->grid_side; gx++) {
-            uint64_t* blk = grd_at(blocks, gx, gy);
+            uint64_t *blk = grd_at(blocks, gx, gy);
 
             // mask composed of all collapsed states
             uint64_t collapsed_mask = 0;
@@ -41,16 +33,15 @@ grd_check_block_errors_omp(wfc_blocks_ptr blocks) {
     return true;
 }
 
-// Check for duplicate values in all rows of the grid
-
 bool
-grd_check_row_errors_omp(wfc_blocks_ptr blocks) {
+grd_check_row_errors_omp(wfc_blocks_ptr blocks)
+{
     for (uint32_t gy = 0; gy < blocks->grid_side; gy++) {
         for (uint32_t y = 0; y < blocks->block_side; y++) {
             uint64_t collapsed_mask = 0;
 
             for (uint32_t gx = 0; gx < blocks->grid_side; gx++) {
-                uint64_t* row = blk_at(blocks, gx, gy, 0, y);
+                uint64_t *row = blk_at(blocks, gx, gy, 0, y);
 
                 for (uint32_t x = 0; x < blocks->block_side; x++) {
                     if (row[x] == 0 || (row[x] & collapsed_mask) != 0) {
@@ -68,16 +59,15 @@ grd_check_row_errors_omp(wfc_blocks_ptr blocks) {
     return true;
 }
 
-// Check for duplicate values in all columns of the grid
-
 bool
-grd_check_column_errors_omp(wfc_blocks_ptr blocks) {
+grd_check_column_errors_omp(wfc_blocks_ptr blocks)
+{
     for (uint32_t gx = 0; gx < blocks->grid_side; gx++) {
         for (uint32_t x = 0; x < blocks->block_side; x++) {
             uint64_t collapsed_mask = 0;
-        
+
             for (uint32_t gy = 0; gy < blocks->grid_side; gy++) {
-                uint64_t* col = blk_at(blocks, gx, gy, x, 0);
+                uint64_t *col = blk_at(blocks, gx, gy, x, 0);
 
                 for (uint32_t y = 0; y < blocks->block_side; y++) {
                     const uint64_t state = col[y * blocks->block_side];
@@ -97,12 +87,10 @@ grd_check_column_errors_omp(wfc_blocks_ptr blocks) {
 }
 
 bool
-blk_propagate_omp(wfc_blocks_ptr blocks,
-              uint32_t gx, uint32_t gy,
-              uint64_t collapsed, position_list* collapsed_stack, 
-                  omp_lock_t* stack_lock)
+blk_propagate_omp(wfc_blocks_ptr blocks, uint32_t gx, uint32_t gy, uint64_t collapsed,
+                  position_list *collapsed_stack, omp_lock_t *stack_lock)
 {
-    uint64_t* block_loc = grd_at(blocks,gx,gy);
+    uint64_t *block_loc = grd_at(blocks, gx, gy);
     bool changed = false;
 
     for (uint32_t i = 0; i < blocks->block_side * blocks->block_side; i++) {
@@ -123,21 +111,20 @@ blk_propagate_omp(wfc_blocks_ptr blocks,
 }
 
 bool
-grd_propagate_row_omp(wfc_blocks_ptr blocks, position loc,
-                  uint64_t collapsed, position_list* collapsed_stack,
-                      omp_lock_t* stack_lock)
+grd_propagate_row_omp(wfc_blocks_ptr blocks, position loc, uint64_t collapsed,
+                      position_list *collapsed_stack, omp_lock_t *stack_lock)
 {
-    uint64_t* row = 0;
+    uint64_t *row = 0;
     bool changed = false;
 
-    for (uint32_t gx=0; gx < blocks->grid_side;gx++){
+    for (uint32_t gx = 0; gx < blocks->grid_side; gx++) {
         if (gx == loc.gx) {
             continue;
         }
-        row = blk_at(blocks,gx,loc.gy,0,loc.y);
-        for (uint32_t x=0; x < blocks->block_side;x++){
+        row = blk_at(blocks, gx, loc.gy, 0, loc.y);
+        for (uint32_t x = 0; x < blocks->block_side; x++) {
             const uint64_t new_state = row[x] & ~collapsed;
-            
+
             changed |= new_state != 0 && new_state != row[x];
 
             if (new_state != row[x] && bitfield_count(new_state) == 1) {
@@ -155,19 +142,18 @@ grd_propagate_row_omp(wfc_blocks_ptr blocks, position loc,
 }
 
 bool
-grd_propagate_column_omp(wfc_blocks_ptr blocks, position loc,
-                         uint64_t collapsed, position_list* collapsed_stack,
-                         omp_lock_t* stack_lock)
+grd_propagate_column_omp(wfc_blocks_ptr blocks, position loc, uint64_t collapsed,
+                         position_list *collapsed_stack, omp_lock_t *stack_lock)
 {
-    uint64_t* col = 0;
+    uint64_t *col = 0;
     bool changed = false;
 
-    for (uint32_t gy=0; gy < blocks->grid_side;gy++){
+    for (uint32_t gy = 0; gy < blocks->grid_side; gy++) {
         if (gy == loc.gy) {
             continue;
         }
-        col = blk_at(blocks,loc.gx,gy,loc.x,0);
-        for (uint32_t y=0; y < blocks->block_side;y++){
+        col = blk_at(blocks, loc.gx, gy, loc.x, 0);
+        for (uint32_t y = 0; y < blocks->block_side; y++) {
             const uint32_t index = y * blocks->block_side;
             const uint64_t new_state = col[index] & ~collapsed;
 
@@ -186,4 +172,3 @@ grd_propagate_column_omp(wfc_blocks_ptr blocks, position loc,
 
     return changed;
 }
-

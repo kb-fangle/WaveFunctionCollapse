@@ -1,99 +1,73 @@
 #pragma once
 
-#include "types.h"
+#include <cstdint>
 #include <cstdio>
-#include <stdint.h>
+
 #include "helper_cuda.h"
-
-
-inline __device__ dim3 global_grid_dim;
-inline __device__ dim3 global_block_dim;
-
-inline __device__ dim3 block_propagation_grid_dim;
-inline __device__ dim3 block_propagation_block_dim;
-
-inline __device__ dim3 row_propagation_grid_dim;
-inline __device__ dim3 row_propagation_block_dim;
-
-inline __device__ dim3 col_propagation_grid_dim;
-inline __device__ dim3 col_propagation_block_dim;
-
-
-inline __global__ void init(uint8_t grid_side, uint8_t block_side) {
-    global_grid_dim = dim3(grid_side, grid_side);
-    global_block_dim = dim3(block_side, block_side);
-
-    block_propagation_grid_dim = dim3(1, 1);
-    block_propagation_block_dim = dim3(block_side, block_side);
-
-    row_propagation_grid_dim = dim3(grid_side, 1);
-    row_propagation_block_dim = dim3(block_side, 1);
-
-    col_propagation_grid_dim = dim3(1, grid_side);
-    col_propagation_block_dim = dim3(1, block_side);
-}
 
 struct wfc_cuda_blocks {
     uint8_t block_side;
     uint8_t grid_side;
 
-    uint32_t grid_size;
-    uint32_t block_size;
-    uint32_t sudoku_size;
-
     uint8_t _1;
     uint8_t _2;
     uint32_t _3;
 
+    uint32_t grid_size;
+    uint32_t block_size;
+    uint32_t sudoku_size;
+
     uint64_t seed;
 
-    uint64_t* d_states = nullptr;
-    uint64_t* h_states = nullptr;
-    uint64_t* d_states_init = nullptr;
-    uint8_t* d_entropies = nullptr;
-    uint8_t* h_entropies = nullptr;
-    bool* d_changed = nullptr;
-    bool* h_changed = nullptr;
-    bool* d_collapsed = nullptr;
-    bool* h_collapsed = nullptr;
-    uint64_t* d_block_collapsed_mask = nullptr;
-    uint64_t* d_row_collapsed_mask = nullptr;
-    uint64_t* d_column_collapsed_mask = nullptr;
+    uint64_t *d_states = nullptr;
+    uint64_t *h_states = nullptr;
+    uint64_t *d_states_init = nullptr;
+    uint8_t *d_entropies = nullptr;
+    uint8_t *h_entropies = nullptr;
+    bool *d_changed = nullptr;
+    bool *h_changed = nullptr;
+    bool *d_collapsed = nullptr;
+    bool *h_collapsed = nullptr;
+    uint64_t *d_block_collapsed_mask = nullptr;
+    uint64_t *d_row_collapsed_mask = nullptr;
+    uint64_t *d_column_collapsed_mask = nullptr;
 
     cudaStream_t streams[4];
     cudaStream_t propagate_streams[3];
 
-    wfc_cuda_blocks(uint8_t grid_side, uint8_t block_side) : grid_side(grid_side), block_side(block_side), grid_size(grid_side * grid_side), block_size(block_side * block_side), sudoku_size(grid_size * block_size) {
-        cudaMalloc((void**)&d_states, sudoku_size * sizeof(*d_states));
-        cudaMalloc((void**)&d_states_init, sudoku_size * sizeof(*d_states_init));
-        cudaMalloc((void**)&d_entropies, sudoku_size * sizeof(*d_entropies));
-        cudaMalloc((void**)&d_changed, sudoku_size * sizeof(*d_changed));
-        cudaMalloc((void**)&d_collapsed, sudoku_size * sizeof(*d_collapsed));
-        cudaMalloc((void**)&d_block_collapsed_mask, grid_size * sizeof(*d_block_collapsed_mask));
-        cudaMalloc((void**)&d_row_collapsed_mask, grid_size * sizeof(*d_row_collapsed_mask));
-        cudaMalloc((void**)&d_column_collapsed_mask, grid_size * sizeof(*d_column_collapsed_mask));
+    wfc_cuda_blocks(uint8_t grid_side, uint8_t block_side)
+        : grid_side(grid_side), block_side(block_side),
+          grid_size(grid_side * grid_side), block_size(block_side * block_side),
+          sudoku_size(grid_size * block_size)
+    {
+        cudaMalloc((void **)&d_states, sudoku_size * sizeof(*d_states));
+        cudaMalloc((void **)&d_states_init, sudoku_size * sizeof(*d_states_init));
+        cudaMalloc((void **)&d_entropies, sudoku_size * sizeof(*d_entropies));
+        cudaMalloc((void **)&d_changed, sudoku_size * sizeof(*d_changed));
+        cudaMalloc((void **)&d_collapsed, sudoku_size * sizeof(*d_collapsed));
+        cudaMalloc((void **)&d_block_collapsed_mask,
+                   grid_size * sizeof(*d_block_collapsed_mask));
+        cudaMalloc((void **)&d_row_collapsed_mask,
+                   grid_side * block_side * sizeof(*d_row_collapsed_mask));
+        cudaMalloc((void **)&d_column_collapsed_mask,
+                   grid_side * block_side * sizeof(*d_column_collapsed_mask));
 
+        cudaMallocHost((void **)&h_states, sudoku_size * sizeof(*h_states));
+        cudaMallocHost((void **)&h_entropies, sudoku_size * sizeof(*h_entropies));
+        cudaMallocHost((void **)&h_changed, sudoku_size * sizeof(*h_changed));
+        cudaMallocHost((void **)&h_collapsed, sudoku_size * sizeof(*h_collapsed));
 
-        cudaMallocHost((void**)&h_states, sudoku_size * sizeof(*h_states));
-        cudaMallocHost((void**)&h_entropies, sudoku_size * sizeof(*h_entropies));
-        cudaMallocHost((void**)&h_changed, sudoku_size * sizeof(*h_changed));
-        cudaMallocHost((void**)&h_collapsed, sudoku_size * sizeof(*h_collapsed));
-
-        for (auto& stream: streams) {
+        for (auto &stream : streams) {
             cudaStreamCreate(&stream);
         }
 
-        for (auto& stream: propagate_streams) {
+        for (auto &stream : propagate_streams) {
             cudaStreamCreate(&stream);
         }
-
-        init<<<1, 1>>>(grid_side, block_side);
     }
 
-    // ~wfc_cuda_blocks() {
-    // }
-
-    void clean() {
+    ~wfc_cuda_blocks()
+    {
         cudaFree(d_states);
         cudaFree(d_entropies);
         cudaFree(d_states_init);
@@ -108,21 +82,25 @@ struct wfc_cuda_blocks {
         cudaFreeHost(h_changed);
         cudaFreeHost(h_collapsed);
 
-        for (auto stream: streams) {
+        for (auto stream : streams) {
             cudaStreamDestroy(stream);
         }
 
-        for (auto stream: propagate_streams) {
+        for (auto stream : propagate_streams) {
             cudaStreamDestroy(stream);
         }
     }
 
-
-    __host__ __device__ uint32_t cell_index(uint32_t grid_x, uint32_t grid_y, uint32_t x, uint32_t y) {
-        return grid_y * grid_side * block_size + grid_x * block_size + y * block_side + x;
+    __host__ __device__ uint32_t
+    cell_index(uint32_t grid_x, uint32_t grid_y, uint32_t x, uint32_t y)
+    {
+        return grid_y * grid_side * block_size + grid_x * block_size + y * block_side
+               + x;
     }
 
-    __host__ __device__ position position_at(uint32_t index) {
+    __host__ __device__ position
+    position_at(uint32_t index)
+    {
         position pos;
         pos.gx = (index / block_size) % grid_side;
         pos.gy = index / (grid_side * block_size);

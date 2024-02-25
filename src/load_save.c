@@ -1,10 +1,5 @@
 #define _GNU_SOURCE
 
-#include "wfc.h"
-#include "wfc_omp.h"
-
-#include "bitfield.h"
-
 #include <ctype.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -14,7 +9,11 @@
 #include <string.h>
 #include <strings.h>
 
-/// With a block side of 8, we have blocks of 8*8 := 64, which is the number of bits in an uint64_t.
+#include "bitfield.h"
+#include "wfc.h"
+
+/// With a block side of 8, we have blocks of 8*8 := 64, which is the number of bits in
+/// an uint64_t.
 static const uint8_t BLOCK_SIDE_U64 = 8;
 
 static void
@@ -52,7 +51,7 @@ next(char *restrict str, char sep)
 static inline wfc_blocks *
 safe_malloc(uint64_t blkcnt)
 {
-    uint64_t size   = sizeof(wfc_blocks) + sizeof(uint64_t) * blkcnt;
+    uint64_t size = sizeof(wfc_blocks) + sizeof(uint64_t) * blkcnt;
     wfc_blocks *ret = (wfc_blocks *)malloc(size);
     if (ret != NULL) {
         return ret;
@@ -65,7 +64,7 @@ safe_malloc(uint64_t blkcnt)
 static inline uint32_t
 to_u32(const char *string)
 {
-    char *end          = NULL;
+    char *end = NULL;
     const long integer = strtol(string, &end, 10);
     if (integer < 0) {
         fprintf(stderr, "expected positive integer, got %ld\n", integer);
@@ -77,7 +76,7 @@ to_u32(const char *string)
 static inline uint64_t
 to_u64(const char *string)
 {
-    char *end               = NULL;
+    char *end = NULL;
     const long long integer = strtoll(string, &end, 10);
     if (integer < 0) {
         fprintf(stderr, "expected positive integer, got %lld\n", integer);
@@ -91,9 +90,9 @@ wfc_load(uint64_t seed, const char *path)
 {
     srandom((uint32_t)seed);
 
-    ssize_t read    = -1;
-    char *line      = NULL;
-    size_t len      = 0;
+    ssize_t read = -1;
+    char *line = NULL;
+    size_t len = 0;
     wfc_blocks *ret = NULL;
     uint64_t blkcnt = 0;
 
@@ -111,16 +110,16 @@ wfc_load(uint64_t seed, const char *path)
         }
 
         if (line[0] == 's') {
-            blkcnt          = block_side * block_side;
-            ret             = safe_malloc(blkcnt);
+            blkcnt = block_side * block_side;
+            ret = safe_malloc(blkcnt);
             ret->block_side = (uint8_t)block_side;
-            ret->grid_side  = 1u;
+            ret->grid_side = 1u;
         } else if (line[0] == 'g') {
-            blkcnt          = block_side * block_side;
-            blkcnt          = blkcnt * blkcnt;
-            ret             = safe_malloc(blkcnt);
+            blkcnt = block_side * block_side;
+            blkcnt = blkcnt * blkcnt;
+            ret = safe_malloc(blkcnt);
             ret->block_side = (uint8_t)block_side;
-            ret->grid_side  = (uint8_t)block_side;
+            ret->grid_side = (uint8_t)block_side;
         } else {
             fprintf(stderr, "invalid header of .dat file\n");
             exit(EXIT_FAILURE);
@@ -131,10 +130,12 @@ wfc_load(uint64_t seed, const char *path)
     }
 
     {
-        uint64_t mask       = 0;
+        uint64_t mask = 0;
         for (uint8_t i = 0; i < ret->block_side * ret->block_side; i += 1) {
-            mask = bitfield_set(mask, i);  // initilise le mask avec tous les états possible
-            // printf("nb bit=%d mask=%d puis %d\n",bitfield_count(mask),bitfield_get(mask,i));
+            mask =
+                bitfield_set(mask, i); // initilise le mask avec tous les états possible
+            // printf("nb bit=%d mask=%d puis
+            // %d\n",bitfield_count(mask),bitfield_get(mask,i));
         }
         ret->seed = seed;
         for (uint64_t i = 0; i < blkcnt; i += 1) {
@@ -145,11 +146,11 @@ wfc_load(uint64_t seed, const char *path)
     while ((read = getline(&line, &len, f)) != -1) {
         trim(line);
 
-        char *str_gx      = line;
-        char *str_gy      = next(str_gx, ',');
-        char *str_x       = next(str_gy, ',');
-        char *str_y       = next(str_x, ',');
-        char *str_state   = next(str_y, '=');
+        char *str_gx = line;
+        char *str_gy = next(str_gx, ',');
+        char *str_x = next(str_gy, ',');
+        char *str_y = next(str_x, ',');
+        char *str_state = next(str_y, '=');
         const uint32_t gx = to_u32(str_gx), gy = to_u32(str_gy), x = to_u32(str_x),
                        y = to_u32(str_y);
 
@@ -157,15 +158,17 @@ wfc_load(uint64_t seed, const char *path)
             fprintf(stderr, "invalid grid coordinates (%u, %u)\n", gx, gy);
             exit(EXIT_FAILURE);
         } else if (x >= ret->block_side || y >= ret->block_side) {
-            fprintf(stderr, "invalid block coordinates (%u, %u) in grid (%u, %u)\n", x, y, gx, gy);
+            fprintf(stderr, "invalid block coordinates (%u, %u) in grid (%u, %u)\n", x,
+                    y, gx, gy);
             exit(EXIT_FAILURE);
         }
-    
-        const uint64_t collapsed   = to_u64(str_state);
+
+        const uint64_t collapsed = to_u64(str_state);
         *blk_at(ret, gx, gy, x, y) = bitfield_set(0, (uint8_t)collapsed - 1);
         propagate(ret, gx, gy, x, y);
         if (!check_grid(ret)) {
-            fprintf(stderr, "wrong propagation in block (%u, %u) from (%u, %u)\n", gx, gy, x, y);
+            fprintf(stderr, "wrong propagation in block (%u, %u) from (%u, %u)\n", gx,
+                    gy, x, y);
             blk_print(stderr, ret, gx, gy);
             exit(EXIT_FAILURE);
         }
@@ -180,13 +183,13 @@ void
 wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[])
 {
     char destination[1024] = { 0 };
-    const size_t data_len  = strlen(data);
-    const char *file_name  = &data[data_len - 1];
+    const size_t data_len = strlen(data);
+    const char *file_name = &data[data_len - 1];
     while (file_name != data && file_name[0] != '/') {
         file_name -= 1;
     }
     const char *file_end = strchr(file_name, '.');
-    long length          = (file_end - file_name);
+    long length = (file_end - file_name);
     if (length >= 1024) {
         length = 1023;
     } else if (length < 0) {
@@ -195,10 +198,11 @@ wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[
 
     const size_t folder_len = strlen(folder);
     if (folder[folder_len - 1] == '/' && file_name[0] == '/') {
-        snprintf(destination, 1023, "%.*s%.*s.%lu.save", (int)(folder_len - 1), folder, (int)length,
-                 file_name, blocks->seed);
-    } else if ((folder[folder_len - 1] == '/' && file_name[0] != '/') ||
-               (folder[folder_len - 1] != '/' && file_name[0] == '/')) {
+        snprintf(destination, 1023, "%.*s%.*s.%lu.save", (int)(folder_len - 1), folder,
+                 (int)length, file_name, blocks->seed);
+    } else if ((folder[folder_len - 1] == '/' && file_name[0] != '/')
+               || (folder[folder_len - 1] != '/' && file_name[0] == '/'))
+    {
         snprintf(destination, 1023, "%s%.*s.%lu.save", folder, (int)length, file_name,
                  blocks->seed);
     } else {
@@ -222,8 +226,8 @@ wfc_save_into(const wfc_blocks_ptr blocks, const char data[], const char folder[
         exit(EXIT_FAILURE);
     }
 
-    const uint64_t ends   = (uint64_t)blocks->grid_side * blocks->grid_side * (uint64_t)blocks->block_side *
-                          blocks->block_side;
+    const uint64_t ends = (uint64_t)blocks->grid_side * blocks->grid_side
+                          * (uint64_t)blocks->block_side * blocks->block_side;
     for (uint64_t i = 0; i < ends; i += 1) {
         if (fprintf(f, "%lu\n", blocks->states[i]) < 0) {
             fprintf(stderr, "failed to write: %s\n", strerror(errno));

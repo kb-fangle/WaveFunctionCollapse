@@ -47,7 +47,20 @@
 #endif
 
 #define getLastCudaError(msg) __getLastCudaError(msg, __FILE__, __LINE__)
-#define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+#define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); getLastCudaError(""); }
+
+#ifndef WFC_CUDA_NO_CHECK
+#define cudaMalloc(...) checkCudaErrors(cudaMalloc(__VA_ARGS__))
+#define cudaMemcpy(...) checkCudaErrors(cudaMemcpy(__VA_ARGS__))
+#define cudaMemcpyAsync(...) checkCudaErrors(cudaMemcpyAsync(__VA_ARGS__))
+#define cudaMemset(...) checkCudaErrors(cudaMemset(__VA_ARGS__))
+#define cudaMemsetAsync(...) checkCudaErrors(cudaMemsetAsync(__VA_ARGS__))
+#define cudaStreamSynchronize(...) checkCudaErrors(cudaStreamSynchronize(__VA_ARGS__))
+#define cudaMallocHost(...) checkCudaErrors(cudaMallocHost(__VA_ARGS__))
+#define cudaFree(...) checkCudaErrors(cudaFree(__VA_ARGS__))
+#define cudaFreeHost(...) checkCudaErrors(cudaFreeHost(__VA_ARGS__))
+#define cudaDeviceSynchronize(...) checkCudaErrors(cudaDeviceSynchronize(__VA_ARGS__))
+#endif
 
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=false)
 {
