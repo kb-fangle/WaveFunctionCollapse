@@ -5,8 +5,7 @@
 #include <stdio.h>
 #include <omp.h>
 
-extern bool solve_cuda(wfc_cuda_blocks* blocks);
-extern bool solve_cuda2(wfc_cuda_blocks& blocks);
+extern bool solve_cuda(wfc_cuda_blocks& blocks);
 
 extern "C" void cuda_main_loop(wfc_args args, wfc_blocks_ptr init) {
     bool quit = false;
@@ -33,7 +32,7 @@ extern "C" void cuda_main_loop(wfc_args args, wfc_blocks_ptr init) {
         cu_blocks.seed = next_seed;
         // cudaMemcpy(cu_blocks.d_states, init->states, cu_blocks.sudoku_size * sizeof(uint64_t), cudaMemcpyHostToDevice);
         // const bool solved = solve_cuda(&cu_blocks);
-        const bool solved = solve_cuda2(cu_blocks);
+        const bool solved = solve_cuda(cu_blocks);
         iterations += 1;
 
         if (solved && args.output_folder != NULL) {
