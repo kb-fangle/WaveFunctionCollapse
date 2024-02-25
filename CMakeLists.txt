@@ -42,7 +42,6 @@ if (CMAKE_CUDA_COMPILER)
     add_library(cuda_solver OBJECT ${WaveFunctionCollapse_CUDA_SRC})
     target_include_directories(cuda_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
     target_compile_definitions(cuda_solver PRIVATE WFC_CUDA $<$<CONFIG:Release>:WFC_CUDA_NO_CHECK>)
-    target_compile_options(cuda_solver PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-rdc=true>)
 
     target_compile_definitions(wfc PRIVATE WFC_CUDA)
     target_link_libraries(wfc PRIVATE cuda_solver)

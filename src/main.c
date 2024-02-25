@@ -133,6 +133,7 @@ main(int argc, char **argv)
 #ifdef WFC_CUDA
         cuda_main_loop(args, init);
 #endif
+        break;
     default:
         break;
     }

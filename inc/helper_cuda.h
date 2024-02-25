@@ -49,17 +49,28 @@
 #define getLastCudaError(msg) __getLastCudaError(msg, __FILE__, __LINE__)
 #define checkCudaErrors(ans) { gpuAssert((ans), __FILE__, __LINE__); getLastCudaError(""); }
 
+#define cudaMallocErr(...) checkCudaErrors(cudaMalloc(__VA_ARGS__))
+#define cudaMemcpyErr(...) checkCudaErrors(cudaMemcpy(__VA_ARGS__))
+#define cudaMemcpyAsyncErr(...) checkCudaErrors(cudaMemcpyAsync(__VA_ARGS__))
+#define cudaMemsetErr(...) checkCudaErrors(cudaMemset(__VA_ARGS__))
+#define cudaMemsetAsyncErr(...) checkCudaErrors(cudaMemsetAsync(__VA_ARGS__))
+#define cudaStreamSynchronizeErr(...) checkCudaErrors(cudaStreamSynchronize(__VA_ARGS__))
+#define cudaMallocHostErr(...) checkCudaErrors(cudaMallocHost(__VA_ARGS__))
+#define cudaFreeErr(...) checkCudaErrors(cudaFree(__VA_ARGS__))
+#define cudaFreeHostErr(...) checkCudaErrors(cudaFreeHost(__VA_ARGS__))
+#define cudaDeviceSynchronizeErr(...) checkCudaErrors(cudaDeviceSynchronize(__VA_ARGS__))
+
 #ifndef WFC_CUDA_NO_CHECK
-#define cudaMalloc(...) checkCudaErrors(cudaMalloc(__VA_ARGS__))
-#define cudaMemcpy(...) checkCudaErrors(cudaMemcpy(__VA_ARGS__))
-#define cudaMemcpyAsync(...) checkCudaErrors(cudaMemcpyAsync(__VA_ARGS__))
-#define cudaMemset(...) checkCudaErrors(cudaMemset(__VA_ARGS__))
-#define cudaMemsetAsync(...) checkCudaErrors(cudaMemsetAsync(__VA_ARGS__))
-#define cudaStreamSynchronize(...) checkCudaErrors(cudaStreamSynchronize(__VA_ARGS__))
-#define cudaMallocHost(...) checkCudaErrors(cudaMallocHost(__VA_ARGS__))
-#define cudaFree(...) checkCudaErrors(cudaFree(__VA_ARGS__))
-#define cudaFreeHost(...) checkCudaErrors(cudaFreeHost(__VA_ARGS__))
-#define cudaDeviceSynchronize(...) checkCudaErrors(cudaDeviceSynchronize(__VA_ARGS__))
+#define cudaMalloc(...) cudaMallocErr(__VA_ARGS__)
+#define cudaMemcpy(...) cudaMemcpyErr(__VA_ARGS__)
+#define cudaMemcpyAsync(...) cudaMemcpyAsyncErr(__VA_ARGS__)
+#define cudaMemset(...) cudaMemsetErr(__VA_ARGS__)
+#define cudaMemsetAsync(...) cudaMemsetAsyncErr(__VA_ARGS__)
+#define cudaStreamSynchronize(...) cudaStreamSynchronizeErr(__VA_ARGS__)
+#define cudaMallocHost(...) cudaMallocHostErr(__VA_ARGS__)
+#define cudaFree(...) cudaFreeErr(__VA_ARGS__)
+#define cudaFreeHost(...) cudaFreeHostErr(__VA_ARGS__)
+#define cudaDeviceSynchronize(...) cudaDeviceSynchronizeErr(__VA_ARGS__)
 #endif
 
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=false)
