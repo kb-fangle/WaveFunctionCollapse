@@ -22,7 +22,7 @@ __device__ uint64_t entropy_collapse_state(uint64_t state, uint32_t gx, uint32_t
         uint64_t seed, iteration;
     } random_state = {gx, gy, x, y, seed, iteration};
 
-    md5((uint8_t*)&random_state, sizeof(random_state), digest);
+    md5_cuda((uint8_t*)&random_state, sizeof(random_state), digest);
 
     uint8_t entropy = entropy_compute(state);
     uint8_t collapse_index = (uint8_t)(*((uint64_t*)digest) % entropy + 1);
@@ -209,6 +209,7 @@ __global__ void solve_gpu(wfc_cuda_blocks blocks) {
     bool ret = true;
     uint64_t iteration = 0;
     
+    memcpy(blocks.d_states, blocks.d_states_init, blocks.sudoku_size * sizeof(*blocks.d_states));
     memset(blocks.d_block_collapsed_mask, 0, blocks.grid_size * sizeof(*blocks.d_block_collapsed_mask));
     memset(blocks.d_row_collapsed_mask, 0, blocks.grid_size * sizeof(*blocks.d_row_collapsed_mask));
     memset(blocks.d_column_collapsed_mask, 0, blocks.grid_size * sizeof(*blocks.d_column_collapsed_mask));

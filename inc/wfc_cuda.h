@@ -48,17 +48,24 @@ struct wfc_cuda_blocks {
     uint64_t seed;
 
     uint64_t* d_states = nullptr;
+    uint64_t* h_states = nullptr;
+    uint64_t* d_states_init = nullptr;
     uint32_t* d_min_entropy = nullptr;
+    uint32_t* h_min_entropy = nullptr;
     bool* d_changed = nullptr;
+    bool* h_changed = nullptr;
     bool* d_collapsed = nullptr;
+    bool* h_collapsed = nullptr;
     uint64_t* d_block_collapsed_mask = nullptr;
     uint64_t* d_row_collapsed_mask = nullptr;
     uint64_t* d_column_collapsed_mask = nullptr;
 
-    cudaStream_t streams[3];
+    cudaStream_t streams[4];
+    cudaStream_t propagate_streams[3];
 
     wfc_cuda_blocks(uint8_t grid_side, uint8_t block_side) : grid_side(grid_side), block_side(block_side), grid_size(grid_side * grid_side), block_size(block_side * block_side), sudoku_size(grid_size * block_size) {
-        cudaMalloc((void**)&d_states, sudoku_size * sizeof(uint64_t));
+        cudaMalloc((void**)&d_states, sudoku_size * sizeof(*d_states));
+        cudaMalloc((void**)&d_states_init, sudoku_size * sizeof(*d_states_init));
         cudaMalloc((void**)&d_min_entropy, 2 * grid_size * sizeof(*d_min_entropy));
         cudaMalloc((void**)&d_changed, sudoku_size * sizeof(*d_changed));
         cudaMalloc((void**)&d_collapsed, sudoku_size * sizeof(*d_collapsed));
@@ -66,7 +73,17 @@ struct wfc_cuda_blocks {
         cudaMalloc((void**)&d_row_collapsed_mask, grid_size * sizeof(*d_row_collapsed_mask));
         cudaMalloc((void**)&d_column_collapsed_mask, grid_size * sizeof(*d_column_collapsed_mask));
 
+
+        cudaMallocHost((void**)&h_min_entropy, 2 * grid_size * sizeof(*h_min_entropy));
+        cudaMallocHost((void**)&h_states, sudoku_size * sizeof(*d_states));
+        cudaMallocHost((void**)&h_changed, sudoku_size * sizeof(*d_changed));
+        cudaMallocHost((void**)&h_collapsed, sudoku_size * sizeof(*d_changed));
+
         for (auto& stream: streams) {
+            cudaStreamCreate(&stream);
+        }
+
+        for (auto& stream: propagate_streams) {
             cudaStreamCreate(&stream);
         }
 
@@ -78,6 +95,7 @@ struct wfc_cuda_blocks {
 
     void clean() {
         cudaFree(d_states);
+        cudaFree(d_states_init);
         cudaFree(d_min_entropy);
         cudaFree(d_changed);
         cudaFree(d_collapsed);
@@ -85,7 +103,16 @@ struct wfc_cuda_blocks {
         cudaFree(d_row_collapsed_mask);
         cudaFree(d_column_collapsed_mask);
 
+        cudaFreeHost(h_states);
+        cudaFreeHost(h_min_entropy);
+        cudaFreeHost(h_changed);
+        cudaFreeHost(h_collapsed);
+
         for (auto stream: streams) {
+            cudaStreamDestroy(stream);
+        }
+
+        for (auto stream: propagate_streams) {
             cudaStreamDestroy(stream);
         }
     }

@@ -70,7 +70,7 @@ __constant__ unsigned char MD5_PADDING[64] = { /* 512 Bits */
 };
 // clang-format on
 
-__device__ void md5(uint8_t *const M, uint32_t len, uint8_t *digest)
+__device__ void md5_cuda(uint8_t *const M, uint32_t len, uint8_t *digest)
 {
     const uint32_t buflen  = (len > MD5_BUFFER) ? MD5_BUFFER : len;
     struct md5_ctx context;
